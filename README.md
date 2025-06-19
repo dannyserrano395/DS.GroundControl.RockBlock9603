@@ -1,0 +1,1 @@
+I created four projects to gain hands-on experience with the RockBlock 9603 satellite modem in preparation for a larger project. The solution includes a library that encapsulates the modem's functionality, a command-line tool for testing, a Windows service for automated testing, and an installer/uninstaller for the service.
