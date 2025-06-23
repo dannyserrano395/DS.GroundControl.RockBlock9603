@@ -14,8 +14,7 @@ namespace DS.GroundControl.RockBlock9603.Service.Manager
         public CancellationToken Started { get; }
         public CancellationToken Stopped { get; }
 
-        public RockBlock9603ProcessManager(
-            IRockBlock9603ProcessFactory rockBlock9603ProcessFactory)
+        public RockBlock9603ProcessManager(IRockBlock9603ProcessFactory rockBlock9603ProcessFactory)
         {
             RockBlock9603ProcessFactory = rockBlock9603ProcessFactory;
             CanceledSource = new CancellationTokenSource();

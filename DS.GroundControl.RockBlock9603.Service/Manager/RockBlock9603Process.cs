@@ -97,42 +97,45 @@ namespace DS.GroundControl.RockBlock9603.Service.Manager
                 try
                 {
                     var sessionArgs = await IridiumSessionAsync();
-                    var session = new
+                    if (sessionArgs != null)
                     {
-                        MobileOriginatedStatus = sessionArgs[0],
-                        MobileOriginatedMessageSequenceNumber = sessionArgs[1],
-                        MobileOriginatedMessage = sessionArgs[2],
-                        MobileTerminatedStatus = sessionArgs[3],
-                        MobileTerminatedMessageSequenceNumber = sessionArgs[4],
-                        MobileTerminatedLength = sessionArgs[5],
-                        MobileTerminatedQueued = sessionArgs[6],
-                        MobileTerminatedMessage = sessionArgs[7]
-                    };
-                    switch (session)
-                    {
-                        case { MobileOriginatedStatus: "0", MobileTerminatedStatus: "0", MobileTerminatedQueued: "0" }:
-                            {
-                                await Task.Delay(TimeSpan.FromMinutes(ConfigurationManager.WorkerConfiguration.IridiumSessionFreqMin), Canceled);
-                                return 0;
-                            }
-                        case { MobileOriginatedStatus: "1" } or { MobileTerminatedStatus: "1" }:
-                            {
-                                await Task.Delay(TimeSpan.FromSeconds(10), Canceled);
-                                return 0;
-                            }
-                        default:
-                            {
-                                if (i < 3)
-                                {
-                                    await Task.Delay(TimeSpan.FromMinutes(ConfigurationManager.WorkerConfiguration.IridiumSessionFreqMin), Canceled);
-                                    return i + 1;
-                                }
-                                else
+                        var session = new
+                        {
+                            MobileOriginatedStatus = sessionArgs[0],
+                            MobileOriginatedMessageSequenceNumber = sessionArgs[1],
+                            MobileOriginatedMessage = sessionArgs[2],
+                            MobileTerminatedStatus = sessionArgs[3],
+                            MobileTerminatedMessageSequenceNumber = sessionArgs[4],
+                            MobileTerminatedLength = sessionArgs[5],
+                            MobileTerminatedQueued = sessionArgs[6],
+                            MobileTerminatedMessage = sessionArgs[7]
+                        };
+                        switch (session)
+                        {
+                            case { MobileOriginatedStatus: "0", MobileTerminatedStatus: "0", MobileTerminatedQueued: "0" }:
                                 {
                                     await Task.Delay(TimeSpan.FromMinutes(ConfigurationManager.WorkerConfiguration.IridiumSessionFreqMin), Canceled);
                                     return 0;
                                 }
-                            }
+                            case { MobileOriginatedStatus: "1" } or { MobileTerminatedStatus: "1" }:
+                                {
+                                    await Task.Delay(TimeSpan.FromSeconds(10), Canceled);
+                                    return 0;
+                                }
+                            default:
+                                {
+                                    if (i < 3)
+                                    {
+                                        await Task.Delay(TimeSpan.FromMinutes(ConfigurationManager.WorkerConfiguration.IridiumSessionFreqMin), Canceled);
+                                        return i + 1;
+                                    }
+                                    else
+                                    {
+                                        await Task.Delay(TimeSpan.FromMinutes(ConfigurationManager.WorkerConfiguration.IridiumSessionFreqMin), Canceled);
+                                        return 0;
+                                    }
+                                }
+                        }
                     }
                 }
                 catch { }
