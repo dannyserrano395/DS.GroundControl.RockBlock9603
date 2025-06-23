@@ -9,7 +9,7 @@
         CancellationToken Faulted { get; }
         Task StartAsync();
         Task StopAsync();
-        Task<(string Command, string Response, string Result)> AppendCarriageReturnAndWriteAsync(string input);
-        Task<(string Command, string Response, string Result)> AppendChecksumAndWriteAsync(string input);
+        Task<(string Command, string Response, string Result)> WriteWithCarriageReturnAsync(string input);
+        Task<(string Command, string Response, string Result)> WriteWithChecksumAsync(string input);
     }
 }

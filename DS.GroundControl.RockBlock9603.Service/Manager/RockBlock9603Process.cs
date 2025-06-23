@@ -92,49 +92,47 @@ namespace DS.GroundControl.RockBlock9603.Service.Manager
         }
         private async Task RockBlock9603RunningAsync()
         {         
-            async Task<int> HandleIridiumSessionAsync(string[] session, int i)
+            async Task<int> HandleIridiumSessionAsync(int i)
             {
                 try
                 {
-                    if (session != null)
+                    var sessionArgs = await IridiumSessionAsync();
+                    var session = new
                     {
-                        var expression = new
-                        {
-                            MobileOriginatedStatus = session[0],
-                            MobileOriginatedMessageSequenceNumber = session[1],
-                            MobileOriginatedMessage = session[2],
-                            MobileTerminatedStatus = session[3],
-                            MobileTerminatedMessageSequenceNumber = session[4],
-                            MobileTerminatedLength = session[5],
-                            MobileTerminatedQueued = session[6],
-                            MobileTerminatedMessage = session[7]
-                        };
-                        switch (expression)
-                        {
-                            case { MobileOriginatedStatus: "0", MobileTerminatedStatus: "0", MobileTerminatedQueued: "0" }:
+                        MobileOriginatedStatus = sessionArgs[0],
+                        MobileOriginatedMessageSequenceNumber = sessionArgs[1],
+                        MobileOriginatedMessage = sessionArgs[2],
+                        MobileTerminatedStatus = sessionArgs[3],
+                        MobileTerminatedMessageSequenceNumber = sessionArgs[4],
+                        MobileTerminatedLength = sessionArgs[5],
+                        MobileTerminatedQueued = sessionArgs[6],
+                        MobileTerminatedMessage = sessionArgs[7]
+                    };
+                    switch (session)
+                    {
+                        case { MobileOriginatedStatus: "0", MobileTerminatedStatus: "0", MobileTerminatedQueued: "0" }:
+                            {
+                                await Task.Delay(TimeSpan.FromMinutes(ConfigurationManager.WorkerConfiguration.IridiumSessionFreqMin), Canceled);
+                                return 0;
+                            }
+                        case { MobileOriginatedStatus: "1" } or { MobileTerminatedStatus: "1" }:
+                            {
+                                await Task.Delay(TimeSpan.FromSeconds(10), Canceled);
+                                return 0;
+                            }
+                        default:
+                            {
+                                if (i < 3)
+                                {
+                                    await Task.Delay(TimeSpan.FromMinutes(ConfigurationManager.WorkerConfiguration.IridiumSessionFreqMin), Canceled);
+                                    return i + 1;
+                                }
+                                else
                                 {
                                     await Task.Delay(TimeSpan.FromMinutes(ConfigurationManager.WorkerConfiguration.IridiumSessionFreqMin), Canceled);
                                     return 0;
                                 }
-                            case { MobileOriginatedStatus: "1" } or { MobileTerminatedStatus: "1" }:
-                                {
-                                    await Task.Delay(TimeSpan.FromSeconds(10), Canceled);
-                                    return 0;
-                                }
-                            default:
-                                {
-                                    if (i < 3)
-                                    {
-                                        await Task.Delay(TimeSpan.FromMinutes(ConfigurationManager.WorkerConfiguration.IridiumSessionFreqMin), Canceled);
-                                        return i + 1;
-                                    }
-                                    else
-                                    {
-                                        await Task.Delay(TimeSpan.FromMinutes(ConfigurationManager.WorkerConfiguration.IridiumSessionFreqMin), Canceled);
-                                        return 0;
-                                    }
-                                }
-                        }
+                            }
                     }
                 }
                 catch { }
@@ -144,8 +142,7 @@ namespace DS.GroundControl.RockBlock9603.Service.Manager
             int i = 0;
             while (i != -1)
             {
-                var session = await IridiumSessionAsync();
-                i = await HandleIridiumSessionAsync(session, i);
+                i = await HandleIridiumSessionAsync(i);
             }
         }
         private async Task RockBlock9603StopAsync()
@@ -154,110 +151,120 @@ namespace DS.GroundControl.RockBlock9603.Service.Manager
         }
         private async Task<string[]> IridiumSessionAsync(string message = default)
         {
-            string moMessage = null;
-            if (message is not null or "")
+            try
             {
-                var sbdwb = await RockBlock9603.AppendCarriageReturnAndWriteAsync($"AT+SBDWB={message.Length}");
-                if (sbdwb is not { Response: "READY" })
+                string moMessage = null;
+                if (message is not null or "")
+                {
+                    var sbdwb = await RockBlock9603.WriteWithCarriageReturnAsync($"AT+SBDWB={message.Length}");
+                    if (sbdwb is not { Response: "READY" })
+                    {
+                        return null;
+                    }
+                    var sbdmsg = await RockBlock9603.WriteWithChecksumAsync(message);
+                    if (sbdmsg is not { Response: "0", Result: "OK" or "0" })
+                    {
+                        return null;
+                    }
+                    moMessage = message;
+                }
+
+                var sbdi = await RockBlock9603.WriteWithCarriageReturnAsync("AT+SBDI");
+                if (sbdi is not { Result: "OK" or "0" })
                 {
                     return null;
                 }
-                var sbdmsg = await RockBlock9603.AppendChecksumAndWriteAsync(message);
-                if (sbdmsg is not { Response: "0", Result: "OK" or "0" })
+
+                var codes = sbdi.Response.RemoveSubstring("+SBDI: ").Replace(" ", "").Split(',');
+
+                string mtMessage = null;
+                if (codes[2] == "1")
+                {
+                    var sbdrb = await RockBlock9603.WriteWithCarriageReturnAsync("AT+SBDRB");
+                    if (sbdrb is not { Result: "OK" or "0" })
+                    {
+                        return null;
+                    }
+                    var length = sbdrb.Response.Substring(0, 2);
+                    mtMessage = sbdrb.Response.Substring(2, sbdrb.Response.Length - 4);
+                    var checksum = sbdrb.Response.Substring(sbdrb.Response.Length - 2);
+                }
+
+                var sbdd = await RockBlock9603.WriteWithCarriageReturnAsync("AT+SBDD2");
+                if (sbdd is not { Result: "OK" or "0" })
                 {
                     return null;
                 }
-                moMessage = message;
+
+                return
+                [
+                    codes[0],
+                    codes[1],
+                    moMessage,
+                    codes[2],
+                    codes[3],
+                    codes[4],
+                    codes[5],
+                    mtMessage
+                ];
             }
-
-            var sbdi = await RockBlock9603.AppendCarriageReturnAndWriteAsync("AT+SBDI");
-            if (sbdi is not { Result: "OK" or "0" })
-            {
-                return null;
-            }
-
-            var codes = sbdi.Response.RemoveSubstring("+SBDI: ").Replace(" ", "").Split(',');
-
-            string mtMessage = null;
-            if (codes[2] == "1")
-            {
-                var sbdrb = await RockBlock9603.AppendCarriageReturnAndWriteAsync("AT+SBDRB");
-                if (sbdrb is not { Result: "OK" or "0" })
-                {
-                    return null;
-                }
-                var length = sbdrb.Response.Substring(0, 2);
-                mtMessage = sbdrb.Response.Substring(2, sbdrb.Response.Length - 4);
-                var checksum = sbdrb.Response.Substring(sbdrb.Response.Length - 2);
-            }
-
-            var sbdd = await RockBlock9603.AppendCarriageReturnAndWriteAsync("AT+SBDD2");
-            if (sbdd is not { Result: "OK" or "0" })
-            {
-                return null;
-            }
-
-            return
-            [
-                codes[0],
-                codes[1],
-                moMessage,
-                codes[2],
-                codes[3],
-                codes[4],
-                codes[5],
-                mtMessage
-            ];
+            catch { }
+            return null;
         }
         private async Task<string[]> IridiumTextSessionAsync(string message = default)
         {
-            string moMessage = null;
-            if (message is not null or "")
+            try
             {
-                var sbdwt = await RockBlock9603.AppendCarriageReturnAndWriteAsync($"AT+SBDWT={message}");
-                if (sbdwt is not { Result: "OK" or "0" })
+                string moMessage = null;
+                if (message is not null or "")
+                {
+                    var sbdwt = await RockBlock9603.WriteWithCarriageReturnAsync($"AT+SBDWT={message}");
+                    if (sbdwt is not { Result: "OK" or "0" })
+                    {
+                        return null;
+                    }
+                    moMessage = message;
+                }
+
+                var sbdi = await RockBlock9603.WriteWithCarriageReturnAsync("AT+SBDI");
+                if (sbdi is not { Result: "OK" or "0" })
                 {
                     return null;
                 }
-                moMessage = message;
-            }
 
-            var sbdi = await RockBlock9603.AppendCarriageReturnAndWriteAsync("AT+SBDI");
-            if (sbdi is not { Result: "OK" or "0" })
-            {
-                return null;
-            }
+                var codes = sbdi.Response.RemoveSubstring("+SBDI: ").Replace(" ", "").Split(',');
 
-            var codes = sbdi.Response.RemoveSubstring("+SBDI: ").Replace(" ", "").Split(',');
+                string mtMessage = null;
+                if (codes[2] == "1")
+                {
+                    var sbdrt = await RockBlock9603.WriteWithCarriageReturnAsync("AT+SBDRT");
+                    if (sbdrt is not { Result: "OK" or "0" })
+                    {
+                        return null;
+                    }
+                    mtMessage = sbdrt.Response.RemoveSubstring("+SBDRT:");
+                }
 
-            string mtMessage = null;
-            if (codes[2] == "1")
-            {
-                var sbdrt = await RockBlock9603.AppendCarriageReturnAndWriteAsync("AT+SBDRT");
-                if (sbdrt is not { Result: "OK" or "0" })
+                var sbdd = await RockBlock9603.WriteWithCarriageReturnAsync("AT+SBDD2");
+                if (sbdd is not { Result: "OK" or "0" })
                 {
                     return null;
                 }
-                mtMessage = sbdrt.Response.RemoveSubstring("+SBDRT:");
-            }
 
-            var sbdd = await RockBlock9603.AppendCarriageReturnAndWriteAsync("AT+SBDD2");
-            if (sbdd is not { Result: "OK" or "0" })
-            {
-                return null;
+                return
+                [
+                    codes[0],
+                    codes[1],
+                    moMessage,
+                    codes[2],
+                    codes[3],
+                    codes[4],
+                    codes[5],
+                    mtMessage
+                ];
             }
-
-            return
-            [
-                codes[0],
-                codes[1],
-                moMessage,
-                codes[2],
-                codes[3],
-                codes[4],
-                codes[5],
-                mtMessage
-            ];
+            catch { }
+            return null;
         }       
         private string ToJsonString<T>(T value) => JsonSerializer.Serialize(value, JsonSerializerOptions);
     }

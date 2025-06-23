@@ -502,30 +502,24 @@ namespace DS.GroundControl.Lib.Devices
             SerialPort.Dispose();
             return (Faulted: true, Output: default);
         }
-        public async Task<(string Command, string Response, string Result)> AppendCarriageReturnAndWriteAsync(string input)
+        private async Task<(string Command, string Response, string Result)> WriteAsync(byte[] input, byte[] delimiter)
         {
-            return await WriteAsync(Encoding.ASCII.GetBytes(input + "\r"));
+            var arr = new byte[input.Length + delimiter.Length];
+            Buffer.BlockCopy(input, 0, arr, 0, input.Length);
+            Buffer.BlockCopy(delimiter, 0, arr, input.Length, delimiter.Length);
+            await ModuleInput.Writer.WriteAsync(arr, Stopped);
+            return await ModuleOutput.Reader.ReadAsync(Stopped).AsTask();
         }
-        public async Task<(string Command, string Response, string Result)> AppendChecksumAndWriteAsync(string input)
+        public async Task<(string Command, string Response, string Result)> WriteWithCarriageReturnAsync(string input)
         {
-            return await WriteAsync(AttachChecksum(Encoding.ASCII.GetBytes(input)));
+            var delimiter = new byte[] { 0xD };
+            return await WriteAsync(Encoding.ASCII.GetBytes(input), delimiter);
         }
-        private async Task<(string Command, string Response, string Result)> WriteAsync(byte[] input)
+        public async Task<(string Command, string Response, string Result)> WriteWithChecksumAsync(string input)
         {
-            try
-            {
-                if (Running.IsCancellationRequested)
-                {
-                    await ModuleInput.Writer.WriteAsync(input, Stopped);
-                    if (await ModuleOutput.Reader.WaitToReadAsync(Stopped).AsTask())
-                    {
-                        return await ModuleOutput.Reader.ReadAsync().AsTask();
-                    }
-                }
-            }
-            catch { }
-            return default;
-        }
+            var delimiter = CalculateChecksum(input);
+            return await WriteAsync(Encoding.ASCII.GetBytes(input), delimiter);
+        }    
         private static string HexSummation(string hex)
         {
             int sum = 0;
@@ -543,28 +537,19 @@ namespace DS.GroundControl.Lib.Devices
 
             return result;
         }
-        private static byte[] CalculateChecksum(string hex)
+        private static byte[] CalculateChecksum(string input)
         {
-            var result = new byte[2];
+            var cks = new byte[2];
+            var hex = Convert.ToHexString(Encoding.ASCII.GetBytes(input));
             var hexSum = HexSummation(hex);
 
             for (int i = 0, j = 0; i < hexSum.Length && i < 4; i += 2, j++)
             {
                 var value = hexSum[i].ToString() + hexSum[i + 1].ToString();
-                result[j] = Convert.ToByte(value, 16);
+                cks[j] = Convert.ToByte(value, 16);
             }
 
-            return result;
+            return cks;
         }
-        private static byte[] AttachChecksum(byte[] arr)
-        {
-            var hex = Convert.ToHexString(arr);
-            var bytes = Convert.FromHexString(hex);
-            var checksum = CalculateChecksum(hex);
-            var result = new byte[bytes.Length + checksum.Length];
-            Buffer.BlockCopy(bytes, 0, result, 0, bytes.Length);
-            Buffer.BlockCopy(checksum, 0, result, result.Length - 2, checksum.Length);
-            return result;
-        }             
     }
 }
