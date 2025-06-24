@@ -166,8 +166,8 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
         }
         private async Task<string> RockBlockTimeAsync()
         {
-            if (!(RockBlock9603?.Running.IsCancellationRequested is true &&
-                RockBlock9603?.Stopped.IsCancellationRequested is false))
+            if (RockBlock9603?.Running.IsCancellationRequested is false ||
+                RockBlock9603?.Stopped.IsCancellationRequested is true)
                 return RockBlockStatus();
 
             var output = await RockBlock9603.WriteWithCarriageReturnAsync("AT-MSSTM");
@@ -189,8 +189,8 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
         }
         private async Task<string> WriteWithCarriageReturnAsync(string input)
         {
-            if (!(RockBlock9603?.Running.IsCancellationRequested is true &&
-                RockBlock9603?.Stopped.IsCancellationRequested is false))
+            if (RockBlock9603?.Running.IsCancellationRequested is false ||
+                RockBlock9603?.Stopped.IsCancellationRequested is true)
                 return RockBlockStatus();
 
             try
@@ -211,8 +211,8 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
         }
         private async Task<string> WriteWithChecksumAsync(string input)
         {
-            if (!(RockBlock9603?.Running.IsCancellationRequested is true &&
-                RockBlock9603?.Stopped.IsCancellationRequested is false))
+            if (RockBlock9603?.Running.IsCancellationRequested is false || 
+                RockBlock9603?.Stopped.IsCancellationRequested is true)
                 return RockBlockStatus();
 
             try
