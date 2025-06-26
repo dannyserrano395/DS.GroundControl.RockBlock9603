@@ -520,7 +520,7 @@ namespace DS.GroundControl.Lib.Devices
             var delimiter = CalculateChecksum(input);
             return await WriteAsync(Encoding.ASCII.GetBytes(input), delimiter);
         }    
-        private static string HexSummation(string hex)
+        private static string CalculateHexSummation(string hex)
         {
             int sum = 0;
             for (int i = 0; i < hex.Length; i += 2)
@@ -541,7 +541,7 @@ namespace DS.GroundControl.Lib.Devices
         {
             var cks = new byte[2];
             var hex = Convert.ToHexString(Encoding.ASCII.GetBytes(input));
-            var hexSum = HexSummation(hex);
+            var hexSum = CalculateHexSummation(hex);
 
             for (int i = 0, j = 0; i < hexSum.Length && i < 4; i += 2, j++)
             {

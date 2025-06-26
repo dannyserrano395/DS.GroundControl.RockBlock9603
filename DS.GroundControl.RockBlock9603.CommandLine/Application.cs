@@ -60,14 +60,14 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
 
             var crOption = new Option<string>(
                 name: "--cr",
-                description: "Appends a carriage return to the end of the command")
+                description: "Adds a carriage return at the end of the command")
             {
                 AllowMultipleArgumentsPerToken = true
             };
 
             var cksOption = new Option<string>(
                 name: "--cks",
-                description: "Appends a checksum to the end of the command")
+                description: "Adds a checksum at the end of the command")
             {
                 AllowMultipleArgumentsPerToken = true
             };
