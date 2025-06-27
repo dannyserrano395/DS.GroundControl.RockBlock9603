@@ -45,7 +45,7 @@ namespace DS.GroundControl.Lib.Devices
                 if (await ConnectModuleAsync())
                 {
                     _ = RunningSource.CancelAsync();
-                    while (await ModuleInput.Reader.WaitToReadAsync(Canceled).AsTask())
+                    while (await ModuleInput.Reader.WaitToReadAsync(Canceled))
                     {
                         var input = await ModuleInput.Reader.ReadAsync();
                         var module = await ModuleManagerAsync(input);
