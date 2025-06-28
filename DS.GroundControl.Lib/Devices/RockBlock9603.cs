@@ -99,7 +99,7 @@ namespace DS.GroundControl.Lib.Devices
                     StopBits = StopBits.One
                 };
                 SerialPort.Open();
-                if (await ModuleAsync(Encoding.ASCII.GetBytes("AT\r")) is { Output: { Command: "AT", Result: "OK" or "0" } })
+                if (await ModuleManagerAsync(Encoding.ASCII.GetBytes("AT\r")) is { Output: { Command: "AT", Result: "OK" or "0" } })
                 {
                     return true;
                 }              
