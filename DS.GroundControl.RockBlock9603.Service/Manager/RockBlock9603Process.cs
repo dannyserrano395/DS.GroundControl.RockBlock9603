@@ -96,19 +96,19 @@ namespace DS.GroundControl.RockBlock9603.Service.Manager
             {
                 try
                 {
-                    var sessionArgs = await IridiumSessionAsync();
-                    if (sessionArgs != null)
+                    var codes = await IridiumSessionAsync();
+                    if (codes != null)
                     {
                         var session = new
                         {
-                            MobileOriginatedStatus = sessionArgs[0],
-                            MobileOriginatedMessageSequenceNumber = sessionArgs[1],
-                            MobileOriginatedMessage = sessionArgs[2],
-                            MobileTerminatedStatus = sessionArgs[3],
-                            MobileTerminatedMessageSequenceNumber = sessionArgs[4],
-                            MobileTerminatedLength = sessionArgs[5],
-                            MobileTerminatedQueued = sessionArgs[6],
-                            MobileTerminatedMessage = sessionArgs[7]
+                            MobileOriginatedStatus = codes[0],
+                            MobileOriginatedMessageSequenceNumber = codes[1],
+                            MobileOriginatedMessage = codes[2],
+                            MobileTerminatedStatus = codes[3],
+                            MobileTerminatedMessageSequenceNumber = codes[4],
+                            MobileTerminatedLength = codes[5],
+                            MobileTerminatedQueued = codes[6],
+                            MobileTerminatedMessage = codes[7]
                         };
                         switch (session)
                         {
@@ -188,9 +188,10 @@ namespace DS.GroundControl.RockBlock9603.Service.Manager
                     {
                         return null;
                     }
-                    var length = sbdrb.Response.Substring(0, 2);
-                    mtMessage = sbdrb.Response.Substring(2, sbdrb.Response.Length - 4);
-                    var checksum = sbdrb.Response.Substring(sbdrb.Response.Length - 2);
+                    var len = sbdrb.Response.Substring(0, 2);
+                    var msg = sbdrb.Response.Substring(2, sbdrb.Response.Length - 4);
+                    var cks = sbdrb.Response.Substring(sbdrb.Response.Length - 2);
+                    mtMessage = msg;
                 }
 
                 var sbdd = await RockBlock9603.WriteWithCarriageReturnAsync("AT+SBDD2");
@@ -273,7 +274,7 @@ namespace DS.GroundControl.RockBlock9603.Service.Manager
     }
 }
 
-#region
+#region AT+SBDI
 // no upload or download
 // success  0 , 0
 // failed   2 , 2  
@@ -289,6 +290,22 @@ namespace DS.GroundControl.RockBlock9603.Service.Manager
 // upload and download
 // success  1 , 1 
 // failed   2 , 2
+#endregion
 
-// Log.Info(ToJsonString(session));
+#region AT+SBDIX
+// no upload or download
+// success  0 , 0
+// failed   32 , 2
+
+// upload and no download
+// success  0 , 0 
+// failed   (32 , 2) , (18 , 2)
+
+// downloand and no upload
+// success  1 , 0
+// failed   2 , 32    
+
+// upload and download
+// success  0 , 1
+// failed   (32 , 2) , (18 , 2)
 #endregion
