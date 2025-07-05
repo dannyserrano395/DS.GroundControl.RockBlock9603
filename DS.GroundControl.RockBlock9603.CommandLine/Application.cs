@@ -413,12 +413,6 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
 // Zn 
 #endregion
 
-#region OTHER
-// &Kn {"Command":"AT&K3","Response":"","Result":"OK"} 
-// SHUTDOWN
-// *F {"ISU":{"Command":"AT*F","Response":"","Result":"OK"}}
-#endregion
-
 #region NUMERIC
 // %R {"ISU":{"Command":"AT%R
 // &Dn 

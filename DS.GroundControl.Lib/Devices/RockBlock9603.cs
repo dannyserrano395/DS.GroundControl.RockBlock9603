@@ -408,7 +408,10 @@ namespace DS.GroundControl.Lib.Devices
                                 break;
                             }
                         case "AT&Y0":
+                        case "AT&K0":
+                        case "AT&K3":
                         case "AT*R1":
+                        case "AT*F":
                         case "AT+SBDMTA=0":
                         case "AT+SBDMTA=1":
                         case "ATE1":
