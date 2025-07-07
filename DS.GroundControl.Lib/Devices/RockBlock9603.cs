@@ -438,7 +438,7 @@ namespace DS.GroundControl.Lib.Devices
                 }
                 #endregion
 
-                #region READY SBDRING <CR><LF><TEXT><CR><LF><CR><LF><TEXT><CR><LF>
+                #region READY SBDRING
                 else if (IsCarriageReturn(command[0]) && IsLineFeed(command[1]))
                 {
                     response = SerialPort.ReadTo("\r\n");
@@ -455,7 +455,7 @@ namespace DS.GroundControl.Lib.Devices
                 }
                 #endregion
 
-                #region READY <TEXT><CR><LF><TEXT><CR>
+                #region READY
                 else if (IsCarriageReturn(command[1]))
                 {
                     response += command[0];
@@ -465,7 +465,7 @@ namespace DS.GroundControl.Lib.Devices
                 }
                 #endregion
 
-                #region READY SBDRING <TEXT><CR><LF><TEXT><CR><LF><CR><LF><TEXT><CR><LF>
+                #region READY SBDRING
                 else
                 {
                     command += SerialPort.ReadTo("\r");
