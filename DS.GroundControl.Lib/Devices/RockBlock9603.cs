@@ -523,28 +523,29 @@ namespace DS.GroundControl.Lib.Devices
             var delimiter = CalculateChecksum(input);
             return await WriteAsync(Encoding.ASCII.GetBytes(input), delimiter);
         }    
-        private static string CalculateHexadecimalSummation(string hex)
+        private static string CalculateHexadecimalSummation(string input)
         {
-            int sum = 0;
+            var hex = Convert.ToHexString(Encoding.ASCII.GetBytes(input));
+
+            int result = 0;
             for (int i = 0; i < hex.Length; i += 2)
             {
                 var value = hex[i].ToString() + hex[i + 1].ToString();
-                sum += Convert.ToInt32(value, 16);
+                result += Convert.ToInt32(value, 16);
             }
 
-            var result = sum.ToString("X");
-            if (result.Length % 2 == 1)
+            var sum = result.ToString("X");
+            if (sum.Length % 2 == 1)
             {
-                result = "0" + result;
+                sum = "0" + sum;
             }
 
-            return result;
+            return sum;
         }
         private static byte[] CalculateChecksum(string input)
         {
             var cks = new byte[2];
-            var hex = Convert.ToHexString(Encoding.ASCII.GetBytes(input));
-            var sum = CalculateHexadecimalSummation(hex);
+            var sum = CalculateHexadecimalSummation(input);
 
             for (int i = 0, j = 0; i < sum.Length && i < 4; i += 2, j++)
             {
