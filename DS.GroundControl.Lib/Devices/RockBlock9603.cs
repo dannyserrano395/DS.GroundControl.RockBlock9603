@@ -186,13 +186,13 @@ namespace DS.GroundControl.Lib.Devices
                                 {
                                     SerialPort.ReadTo("\n");
                                     result = SerialPort.ReadTo("\r\n");
-                                    response = Encoding.UTF8.GetString(len.Concat(msg).Concat(cks).ToArray());
+                                    response = Encoding.ASCII.GetString(len.Concat(msg).Concat(cks).ToArray());
                                 }
                                 else if (IsAscii(next))
                                 {
                                     result += Convert.ToChar(next);
                                     result += SerialPort.ReadTo("\r");
-                                    response = Encoding.UTF8.GetString(len.Concat(msg).Concat(cks).ToArray());
+                                    response = Encoding.ASCII.GetString(len.Concat(msg).Concat(cks).ToArray());
                                 }                             
                                 break;
                             }
