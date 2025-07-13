@@ -8,8 +8,8 @@ namespace DS.GroundControl.Lib.Devices
     public class RockBlock9603 : IRockBlock9603
     {
         private SerialPort SerialPort { get; set; }
-        private Channel<byte[]> ModuleInput { get; }
-        private Channel<(string Command, string Response, string Result)> ModuleOutput { get; }
+        private Channel<byte[]> Input { get; }
+        private Channel<(string Command, string Response, string Result)> Output { get; }
         private CancellationTokenSource CanceledSource { get; }
         private CancellationTokenSource StartedSource { get; }
         private CancellationTokenSource RunningSource { get; }
@@ -23,8 +23,8 @@ namespace DS.GroundControl.Lib.Devices
 
         public RockBlock9603()
         {
-            ModuleInput = Channel.CreateUnbounded<byte[]>();
-            ModuleOutput = Channel.CreateUnbounded<(string Command, string Response, string Result)>();
+            Input = Channel.CreateUnbounded<byte[]>();
+            Output = Channel.CreateUnbounded<(string Command, string Response, string Result)>();
             CanceledSource = new CancellationTokenSource();
             StartedSource = new CancellationTokenSource();
             RunningSource = new CancellationTokenSource();
@@ -42,21 +42,23 @@ namespace DS.GroundControl.Lib.Devices
             _ = StartedSource.CancelAsync();
             try
             {
-                if (await ConnectModuleAsync())
+                if (await ConnectAsync())
                 {
                     _ = RunningSource.CancelAsync();
-                    while (await ModuleInput.Reader.WaitToReadAsync(Canceled))
+                    while (true)
                     {
-                        var input = await ModuleInput.Reader.ReadAsync();
-                        var output = await ModuleManagerAsync(input);
-                        await ModuleOutput.Writer.WriteAsync(output);
+                        var input = await Input.Reader.ReadAsync(Canceled);
+                        var write = await WriteToRockBlockAsync(input);
+                        if (write.Faulted)
+                        {
+                            _ = FaultedSource.CancelAsync();
+                            break;
+                        }
+                        await Output.Writer.WriteAsync(write.Output);
                     }
                 }
             }
-            catch 
-            {
-                _ = FaultedSource.CancelAsync();
-            }
+            catch { }
             _ = StoppedSource.CancelAsync();
         }
         public async Task StopAsync()
@@ -73,18 +75,18 @@ namespace DS.GroundControl.Lib.Devices
             StoppedSource.Dispose();
             FaultedSource.Dispose();
         }
-        private async Task<bool> ConnectModuleAsync()
+        private async Task<bool> ConnectAsync()
         {
             foreach (var name in SerialPort.GetPortNames())
             {
-                if (await ConnectModuleAsync(name))
+                if (await ConnectAsync(name))
                 {
                     return true;
                 }
             }
             return false;
         }
-        private async Task<bool> ConnectModuleAsync(string portName)
+        private async Task<bool> ConnectAsync(string portName)
         {
             try
             {
@@ -97,7 +99,7 @@ namespace DS.GroundControl.Lib.Devices
                     StopBits = StopBits.One
                 };
                 SerialPort.Open();
-                if (await ModuleManagerAsync(Encoding.ASCII.GetBytes("AT\r")) is { Command: "AT", Result: "OK" or "0" })
+                if (await WriteToRockBlockAsync(Encoding.ASCII.GetBytes("AT\r")) is { Faulted: false, Output: { Command: "AT", Result: "OK" or "0" } })
                 {
                     return true;
                 }              
@@ -107,28 +109,9 @@ namespace DS.GroundControl.Lib.Devices
             SerialPort = null;
             return false;
         }
-        private async Task<(string Command, string Response, string Result)> ModuleManagerAsync(byte[] input)
+        private async Task<(bool Faulted, (string Command, string Response, string Result) Output)> WriteToRockBlockAsync(byte[] input)
         {
-            static bool IsRingAlert(string response)
-            {
-                return response is "SBDRING" or "126";
-            }
-
-            var ip = input;
-            while (true)
-            {
-                var output = await ModuleAsync(ip);
-                if (IsRingAlert(output.Response))
-                {
-                    ip = null;
-                    continue;
-                }
-                return output;
-            }
-        }
-        private async Task<(string Command, string Response, string Result)> ModuleAsync(byte[] input)
-        {
-            Task<(string Command, string Response, string Result)> ExecuteModuleInputAsync(byte[] input)
+            Task<(string Command, string Response, string Result)> ExecuteAsync(byte[] input)
             {
                 return Task.Run(() =>
                 {
@@ -442,11 +425,7 @@ namespace DS.GroundControl.Lib.Devices
                     else if (IsCarriageReturn(command[0]) && IsLineFeed(command[1]))
                     {
                         response = SerialPort.ReadTo("\r\n");
-                        if (response == "SBDRING")
-                        {
-
-                        }
-                        else
+                        if (response != "SBDRING")
                         {
                             SerialPort.ReadTo("\r\n");
                             result = SerialPort.ReadTo("\r\n");
@@ -496,22 +475,39 @@ namespace DS.GroundControl.Lib.Devices
                     return (command, response, result);
                 });
             }
-
-            var output = ExecuteModuleInputAsync(input);
-            var timedout = await output.TimeoutAfterAsync(TimeSpan.FromMinutes(1));
-            if (output.IsFaulted || timedout)
+            static bool IsRingAlert(string response)
             {
-                SerialPort.Dispose();
+                return response is "SBDRING" or "126";
             }
-            return await output;
+
+            try
+            {
+                var ip = input;
+                while (true)
+                {
+                    var output = ExecuteAsync(ip);
+                    if (await output.TimeoutAfterAsync(TimeSpan.FromMinutes(1)))
+                    {
+                        SerialPort.Dispose();
+                    }
+                    if (IsRingAlert((await output).Response))
+                    {
+                        ip = null;
+                        continue;
+                    }
+                    return (Faulted: false, Output: await output);
+                }
+            }
+            catch { }
+            return (Faulted: true, Output: default);
         }
         private async Task<(string Command, string Response, string Result)> WriteAsync(byte[] input, byte[] delimiter)
         {
             var arr = new byte[input.Length + delimiter.Length];
             Buffer.BlockCopy(input, 0, arr, 0, input.Length);
             Buffer.BlockCopy(delimiter, 0, arr, input.Length, delimiter.Length);
-            await ModuleInput.Writer.WriteAsync(arr, Stopped);
-            return await ModuleOutput.Reader.ReadAsync(Stopped).AsTask();
+            await Input.Writer.WriteAsync(arr, Stopped);
+            return await Output.Reader.ReadAsync(Stopped);
         }
         public async Task<(string Command, string Response, string Result)> WriteWithCarriageReturnAsync(string input)
         {

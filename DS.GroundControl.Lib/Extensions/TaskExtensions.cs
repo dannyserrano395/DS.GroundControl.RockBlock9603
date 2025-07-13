@@ -2,18 +2,14 @@
 {
     public static class TaskExtensions
     {
-        public static async Task<bool> TimeoutAfterAsync(this Task task, TimeSpan timespan, CancellationToken cancellationToken = default)
+        public static async Task<bool> TimeoutAfterAsync(this Task task, TimeSpan timespan)
         {
-            using var cts = cancellationToken != default
-                ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)
-                : new CancellationTokenSource();
-
+            using var cts = new CancellationTokenSource();
             if (await Task.WhenAny(task, Task.Delay(timespan, cts.Token)) == task)
             {
                 cts.Cancel();
                 return false;
             }
-            cancellationToken.ThrowIfCancellationRequested();
             return true;
         }
         public static bool TimeoutAfter(this Task task, TimeSpan timespan)
