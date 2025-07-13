@@ -11,10 +11,10 @@
             if (await Task.WhenAny(task, Task.Delay(timespan, cts.Token)) == task)
             {
                 cts.Cancel();
-                return true;
+                return false;
             }
             cancellationToken.ThrowIfCancellationRequested();
-            return false;
+            return true;
         }
         public static bool TimeoutAfter(this Task task, TimeSpan timespan)
         {
@@ -22,9 +22,9 @@
             if (Task.WaitAny([task, Task.Delay(timespan, cts.Token)]) == 0)
             {
                 cts.Cancel();
-                return true;
+                return false;
             }
-            return false;
+            return true;
         }
     }
 }
