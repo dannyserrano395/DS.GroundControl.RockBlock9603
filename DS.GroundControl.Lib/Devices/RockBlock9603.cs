@@ -45,16 +45,19 @@ namespace DS.GroundControl.Lib.Devices
                 if (await ConnectAsync())
                 {
                     _ = RunningSource.CancelAsync();
-                    while (true)
+                    using (SerialPort)
                     {
-                        var input = await Input.Reader.ReadAsync(Canceled);
-                        var write = await WriteToRockBlockAsync(input);
-                        if (write.Faulted)
+                        while (true)
                         {
-                            _ = FaultedSource.CancelAsync();
-                            break;
+                            var input = await Input.Reader.ReadAsync(Canceled);
+                            var write = await WriteToRockBlockAsync(input);
+                            if (!write.Succeeded)
+                            {
+                                _ = FaultedSource.CancelAsync();
+                                break;
+                            }
+                            await Output.Writer.WriteAsync(write.Output);
                         }
-                        await Output.Writer.WriteAsync(write.Output);
                     }
                 }
             }
@@ -68,7 +71,6 @@ namespace DS.GroundControl.Lib.Devices
             {
                 await Stopped.WhenCanceledAsync();
             }
-            SerialPort?.Dispose();
             CanceledSource.Dispose();
             StartedSource.Dispose();
             RunningSource.Dispose();
@@ -99,17 +101,19 @@ namespace DS.GroundControl.Lib.Devices
                     StopBits = StopBits.One
                 };
                 SerialPort.Open();
-                if (await WriteToRockBlockAsync(Encoding.ASCII.GetBytes("AT\r")) is { Faulted: false, Output: { Command: "AT", Result: "OK" or "0" } })
+
+                var write = await WriteToRockBlockAsync(Encoding.ASCII.GetBytes("AT\r"));
+                if (write is { Succeeded: true, Output: { Command: "AT", Result: "OK" or "0" } })
                 {
                     return true;
-                }              
+                }
+
+                SerialPort.Dispose();
             }
             catch { }
-            SerialPort?.Dispose();
-            SerialPort = null;
             return false;
         }
-        private async Task<(bool Faulted, (string Command, string Response, string Result) Output)> WriteToRockBlockAsync(byte[] input)
+        private async Task<(bool Succeeded, (string Command, string Response, string Result) Output)> WriteToRockBlockAsync(byte[] input)
         {
             Task<(string Command, string Response, string Result)> ExecuteAsync(byte[] input)
             {
@@ -488,18 +492,18 @@ namespace DS.GroundControl.Lib.Devices
                     var output = ExecuteAsync(ip);
                     if (await output.TimeoutAfterAsync(TimeSpan.FromMinutes(1)))
                     {
-                        SerialPort.Dispose();
+                        break;
                     }
                     if (IsRingAlert((await output).Response))
                     {
                         ip = null;
                         continue;
                     }
-                    return (Faulted: false, Output: await output);
+                    return (Succeeded: true, Output: await output);
                 }
             }
             catch { }
-            return (Faulted: true, Output: default);
+            return (Succeeded: false, Output: default);
         }
         private async Task<(string Command, string Response, string Result)> WriteAsync(byte[] input, byte[] delimiter)
         {
