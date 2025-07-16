@@ -50,18 +50,17 @@ namespace DS.GroundControl.Lib.Devices
                         while (true)
                         {
                             var input = await Input.Reader.ReadAsync(Canceled);
-                            var write = await WriteToRockBlockAsync(input);
-                            if (!write.Succeeded)
-                            {
-                                _ = FaultedSource.CancelAsync();
-                                break;
-                            }
-                            await Output.Writer.WriteAsync(write.Output);
+                            var output = await WriteToRockBlockAsync(input);
+                            await Output.Writer.WriteAsync(output);
                         }
                     }
                 }
             }
-            catch { }
+            catch (OperationCanceledException) { }
+            catch (Exception)
+            {
+                _ = FaultedSource.CancelAsync();
+            }
             _ = StoppedSource.CancelAsync();
         }
         public async Task StopAsync()
@@ -79,9 +78,9 @@ namespace DS.GroundControl.Lib.Devices
         }
         private async Task<bool> ConnectAsync()
         {
-            foreach (var name in SerialPort.GetPortNames())
+            foreach (var portName in SerialPort.GetPortNames())
             {
-                if (await ConnectAsync(name))
+                if (await ConnectAsync(portName))
                 {
                     return true;
                 }
@@ -103,7 +102,7 @@ namespace DS.GroundControl.Lib.Devices
                 SerialPort.Open();
 
                 var write = await WriteToRockBlockAsync(Encoding.ASCII.GetBytes("AT\r"));
-                if (write is { Succeeded: true, Output: { Command: "AT", Result: "OK" or "0" } })
+                if (write is { Command: "AT", Result: "OK" or "0" })
                 {
                     return true;
                 }
@@ -113,7 +112,7 @@ namespace DS.GroundControl.Lib.Devices
             catch { }
             return false;
         }
-        private async Task<(bool Succeeded, (string Command, string Response, string Result) Output)> WriteToRockBlockAsync(byte[] input)
+        private async Task<(string Command, string Response, string Result)> WriteToRockBlockAsync(byte[] input)
         {
             Task<(string Command, string Response, string Result)> ExecuteAsync(byte[] input)
             {
@@ -484,26 +483,17 @@ namespace DS.GroundControl.Lib.Devices
                 return response is "SBDRING" or "126";
             }
 
-            try
+            while (true)
             {
-                var ip = input;
-                while (true)
+                var output = ExecuteAsync(input);
+                await output.ThrowOnTimeoutAsync(TimeSpan.FromMinutes(1));
+                if (IsRingAlert((await output).Response))
                 {
-                    var output = ExecuteAsync(ip);
-                    if (await output.TimeoutAfterAsync(TimeSpan.FromMinutes(1)))
-                    {
-                        break;
-                    }
-                    if (IsRingAlert((await output).Response))
-                    {
-                        ip = null;
-                        continue;
-                    }
-                    return (Succeeded: true, Output: await output);
+                    input = null;
+                    continue;
                 }
+                return await output;
             }
-            catch { }
-            return (Succeeded: false, Output: default);
         }
         private async Task<(string Command, string Response, string Result)> WriteAsync(byte[] input, byte[] delimiter)
         {
