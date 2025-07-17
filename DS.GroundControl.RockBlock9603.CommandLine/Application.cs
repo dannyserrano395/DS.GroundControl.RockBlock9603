@@ -170,22 +170,25 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
                 RockBlock9603?.Stopped.IsCancellationRequested is true)
                 return RockBlockStatus();
 
-            var output = await RockBlock9603.WriteWithCarriageReturnAsync("AT-MSSTM");
+            try
+            {
+                var output = await RockBlock9603.WriteWithCarriageReturnAsync("AT-MSSTM");
 
-            var hex = output.Response.Split("-MSSTM: ").Last();
-            var time = hex.All(char.IsAsciiHexDigit)
-                ? CalculateIridiumTime(hex)
-                : hex;
+                var hex = output.Response.Split("-MSSTM: ").Last();
+                var time = hex.All(char.IsAsciiHexDigit)
+                    ? CalculateIridiumTime(hex)
+                    : hex;
 
-            return output != default
-                ? ToJsonString(new
+                return ToJsonString(new
                 {
                     ISU = new
                     {
                         Time = time
                     }
-                })
-                : RockBlockStatus();
+                });
+            }
+            catch { }
+            return RockBlockStatus();
         }
         private async Task<string> WriteWithCarriageReturnAsync(string input)
         {
