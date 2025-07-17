@@ -89,7 +89,7 @@ namespace DS.GroundControl.Lib.Devices
                         StopBits = StopBits.One
                     };
                     serialPort.Open();
-                    if (await IsConnectAsync(serialPort))
+                    if (await IsConnectedAsync(serialPort))
                     {
                         return serialPort;
                     }
@@ -99,7 +99,7 @@ namespace DS.GroundControl.Lib.Devices
             }
             throw new DeviceNotFoundException();
         }
-        private static async Task<bool> IsConnectAsync(SerialPort serialPort)
+        private static async Task<bool> IsConnectedAsync(SerialPort serialPort)
         {
             try
             {
