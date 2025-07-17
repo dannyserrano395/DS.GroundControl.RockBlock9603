@@ -2,6 +2,7 @@
 using System.Text;
 using System.Threading.Channels;
 using DS.GroundControl.Lib.Extensions;
+using DS.GroundControl.Lib.Exceptions;
 
 namespace DS.GroundControl.Lib.Devices
 {
@@ -42,17 +43,14 @@ namespace DS.GroundControl.Lib.Devices
             _ = StartedSource.CancelAsync();
             try
             {
-                if (await ConnectAsync())
+                using (SerialPort = await ConnectAsync())
                 {
                     _ = RunningSource.CancelAsync();
-                    using (SerialPort)
+                    while (true)
                     {
-                        while (true)
-                        {
-                            var input = await Input.Reader.ReadAsync(Canceled);
-                            var output = await WriteToRockBlockAsync(input);
-                            await Output.Writer.WriteAsync(output);
-                        }
+                        var input = await Input.Reader.ReadAsync(Canceled);
+                        var output = await WriteToRockBlockAsync(SerialPort, input);
+                        await Output.Writer.WriteAsync(output);
                     }
                 }
             }
@@ -76,45 +74,47 @@ namespace DS.GroundControl.Lib.Devices
             StoppedSource.Dispose();
             FaultedSource.Dispose();
         }
-        private async Task<bool> ConnectAsync()
+        private static async Task<SerialPort> ConnectAsync()
         {
             foreach (var portName in SerialPort.GetPortNames())
             {
-                if (await ConnectAsync(portName))
+                try
                 {
-                    return true;
+                    var serialPort = new SerialPort()
+                    {
+                        PortName = portName,
+                        BaudRate = 19200,
+                        DataBits = 8,
+                        Parity = Parity.None,
+                        StopBits = StopBits.One
+                    };
+                    serialPort.Open();
+                    if (await IsConnectAsync(serialPort))
+                    {
+                        return serialPort;
+                    }
+                    serialPort.Dispose();
                 }
+                catch { }
             }
-            return false;
+            throw new DeviceNotFoundException();
         }
-        private async Task<bool> ConnectAsync(string portName)
+        private static async Task<bool> IsConnectAsync(SerialPort serialPort)
         {
             try
             {
-                SerialPort = new SerialPort()
-                {
-                    PortName = portName,
-                    BaudRate = 19200,
-                    DataBits = 8,
-                    Parity = Parity.None,
-                    StopBits = StopBits.One
-                };
-                SerialPort.Open();
-
-                var write = await WriteToRockBlockAsync(Encoding.ASCII.GetBytes("AT\r"));
+                var write = await RockBlockAsync(serialPort, Encoding.ASCII.GetBytes("AT\r"));
                 if (write is { Command: "AT", Result: "OK" or "0" })
                 {
                     return true;
                 }
-
-                SerialPort.Dispose();
             }
             catch { }
             return false;
         }
-        private async Task<(string Command, string Response, string Result)> WriteToRockBlockAsync(byte[] input)
+        private static async Task<(string Command, string Response, string Result)> RockBlockAsync(SerialPort serialPort, byte[] input)
         {
-            Task<(string Command, string Response, string Result)> ExecuteAsync(byte[] input)
+            static Task<(string Command, string Response, string Result)> RockBlockAsync(SerialPort serialPort, byte[] input)
             {
                 return Task.Run(() =>
                 {
@@ -128,75 +128,75 @@ namespace DS.GroundControl.Lib.Devices
 
                     if (input != null)
                     {
-                        SerialPort.Write(input, 0, input.Length);
+                        serialPort.Write(input, 0, input.Length);
                     }
 
-                    command += Convert.ToChar(SerialPort.ReadChar());
-                    command += Convert.ToChar(SerialPort.ReadChar());
+                    command += Convert.ToChar(serialPort.ReadChar());
+                    command += Convert.ToChar(serialPort.ReadChar());
 
                     #region AT Commands
                     if (command.StartsWith("AT", StringComparison.OrdinalIgnoreCase))
                     {
-                        command += SerialPort.ReadTo("\r");
+                        command += serialPort.ReadTo("\r");
                         switch (command.ToUpper())
                         {
                             case "AT+CCLK?":
                                 {
-                                    var next = SerialPort.ReadChar();
+                                    var next = serialPort.ReadChar();
                                     if (IsCarriageReturn(next))
                                     {
-                                        SerialPort.ReadTo("\n");
-                                        response = SerialPort.ReadTo("\n\r\n");
-                                        SerialPort.ReadTo("\r\n");
-                                        result = SerialPort.ReadTo("\r\n");
+                                        serialPort.ReadTo("\n");
+                                        response = serialPort.ReadTo("\n\r\n");
+                                        serialPort.ReadTo("\r\n");
+                                        result = serialPort.ReadTo("\r\n");
                                     }
                                     else if (IsAscii(next))
                                     {
                                         response += Convert.ToChar(next);
-                                        response += SerialPort.ReadTo("\n\r\n");
-                                        result = SerialPort.ReadTo("\r");
+                                        response += serialPort.ReadTo("\n\r\n");
+                                        result = serialPort.ReadTo("\r");
                                     }
                                     break;
                                 }
                             case "AT+SBDRB":
                                 {
                                     var len = new byte[2];
-                                    SerialPort.ReadExactly(len, 0, 2);
+                                    serialPort.ReadExactly(len, 0, 2);
                                     var msg = new byte[len[0] + len[1]];
-                                    SerialPort.ReadExactly(msg, 0, msg.Length);
+                                    serialPort.ReadExactly(msg, 0, msg.Length);
                                     var cks = new byte[2];
-                                    SerialPort.ReadExactly(cks, 0, 2);
+                                    serialPort.ReadExactly(cks, 0, 2);
 
-                                    var next = SerialPort.ReadChar();
+                                    var next = serialPort.ReadChar();
                                     if (IsCarriageReturn(next))
                                     {
-                                        SerialPort.ReadTo("\n");
-                                        result = SerialPort.ReadTo("\r\n");
+                                        serialPort.ReadTo("\n");
+                                        result = serialPort.ReadTo("\r\n");
                                         response = Encoding.ASCII.GetString(len.Concat(msg).Concat(cks).ToArray());
                                     }
                                     else if (IsAscii(next))
                                     {
                                         result += Convert.ToChar(next);
-                                        result += SerialPort.ReadTo("\r");
+                                        result += serialPort.ReadTo("\r");
                                         response = Encoding.ASCII.GetString(len.Concat(msg).Concat(cks).ToArray());
                                     }
                                     break;
                                 }
                             case "AT+SBDRT":
                                 {
-                                    var next = SerialPort.ReadChar();
+                                    var next = serialPort.ReadChar();
                                     if (IsCarriageReturn(next))
                                     {
-                                        SerialPort.ReadTo("\n");
-                                        response += SerialPort.ReadTo("\r\n");
-                                        response += SerialPort.ReadTo("\r\n");
-                                        result = SerialPort.ReadTo("\r\n");
+                                        serialPort.ReadTo("\n");
+                                        response += serialPort.ReadTo("\r\n");
+                                        response += serialPort.ReadTo("\r\n");
+                                        result = serialPort.ReadTo("\r\n");
                                     }
                                     else if (IsAscii(next))
                                     {
                                         response += Convert.ToChar(next);
-                                        response += SerialPort.ReadTo("\r\n");
-                                        response += SerialPort.ReadTo("\r");
+                                        response += serialPort.ReadTo("\r\n");
+                                        response += serialPort.ReadTo("\r");
                                         result = response[response.Length - 1].ToString();
                                         response = response.Remove(response.Length - 1);
                                     }
@@ -205,34 +205,34 @@ namespace DS.GroundControl.Lib.Devices
                             case "AT+SBDWT":
                             case var str when str.StartsWith("AT+SBDWB="):
                                 {
-                                    var next = SerialPort.ReadChar();
+                                    var next = serialPort.ReadChar();
                                     if (IsCarriageReturn(next))
                                     {
-                                        SerialPort.ReadTo("\n");
-                                        response = SerialPort.ReadTo("\r\n");
+                                        serialPort.ReadTo("\n");
+                                        response = serialPort.ReadTo("\r\n");
                                     }
                                     else if (IsAscii(next))
                                     {
                                         response += Convert.ToChar(next);
-                                        response += SerialPort.ReadTo("\r\n");
+                                        response += serialPort.ReadTo("\r\n");
                                     }
                                     break;
                                 }
                             case "AT&V":
                                 {
-                                    var next = SerialPort.ReadChar();
+                                    var next = serialPort.ReadChar();
                                     if (IsCarriageReturn(next))
                                     {
-                                        SerialPort.ReadTo("\n");
+                                        serialPort.ReadTo("\n");
                                         int i = 0;
                                         while (true)
                                         {
-                                            result = SerialPort.ReadTo("\r\n");
+                                            result = serialPort.ReadTo("\r\n");
                                             if (i == 10)
                                             {
                                                 break;
                                             }
-                                            SerialPort.ReadTo("\n");
+                                            serialPort.ReadTo("\n");
                                             response += result;
                                             i++;
                                         }
@@ -243,10 +243,10 @@ namespace DS.GroundControl.Lib.Devices
                                         int i = 0;
                                         while (true)
                                         {
-                                            result = SerialPort.ReadTo("\r\n");
+                                            result = serialPort.ReadTo("\r\n");
                                             if (i == 9)
                                             {
-                                                result = SerialPort.ReadTo("\r");
+                                                result = serialPort.ReadTo("\r");
                                                 break;
                                             }
                                             response += result;
@@ -258,19 +258,19 @@ namespace DS.GroundControl.Lib.Devices
                             case "AT+GMR":
                             case "AT+CGMR":
                                 {
-                                    var next = SerialPort.ReadChar();
+                                    var next = serialPort.ReadChar();
                                     if (IsCarriageReturn(next))
                                     {
-                                        SerialPort.ReadTo("\n");
+                                        serialPort.ReadTo("\n");
                                         int i = 0;
                                         while (true)
                                         {
-                                            result = SerialPort.ReadTo("\r\n");
+                                            result = serialPort.ReadTo("\r\n");
                                             if (i == 7)
                                             {
                                                 break;
                                             }
-                                            SerialPort.ReadTo("\n");
+                                            serialPort.ReadTo("\n");
                                             response += result;
                                             i++;
                                         }
@@ -281,10 +281,10 @@ namespace DS.GroundControl.Lib.Devices
                                         int i = 0;
                                         while (true)
                                         {
-                                            result = SerialPort.ReadTo("\r\n");
+                                            result = serialPort.ReadTo("\r\n");
                                             if (i == 6)
                                             {
-                                                result = SerialPort.ReadTo("\r");
+                                                result = serialPort.ReadTo("\r");
                                                 break;
                                             }
                                             response += result;
@@ -295,19 +295,19 @@ namespace DS.GroundControl.Lib.Devices
                                 }
                             case "AT%R":
                                 {
-                                    var next = SerialPort.ReadChar();
+                                    var next = serialPort.ReadChar();
                                     if (IsCarriageReturn(next))
                                     {
-                                        SerialPort.ReadTo("\n");
+                                        serialPort.ReadTo("\n");
                                         int i = 0;
                                         while (true)
                                         {
-                                            result = SerialPort.ReadTo("\r\n");
+                                            result = serialPort.ReadTo("\r\n");
                                             if (i == 66)
                                             {
                                                 break;
                                             }
-                                            SerialPort.ReadTo("\n");
+                                            serialPort.ReadTo("\n");
                                             response += result;
                                             i++;
                                         }
@@ -318,10 +318,10 @@ namespace DS.GroundControl.Lib.Devices
                                         int i = 0;
                                         while (true)
                                         {
-                                            result = SerialPort.ReadTo("\r\n");
+                                            result = serialPort.ReadTo("\r\n");
                                             if (i == 65)
                                             {
-                                                result = SerialPort.ReadTo("\r");
+                                                result = serialPort.ReadTo("\r");
                                                 break;
                                             }
                                             response += result;
@@ -378,18 +378,18 @@ namespace DS.GroundControl.Lib.Devices
                             case "ATI6":
                             case "ATI7":
                                 {
-                                    var next = SerialPort.ReadChar();
+                                    var next = serialPort.ReadChar();
                                     if (IsCarriageReturn(next))
                                     {
-                                        SerialPort.ReadTo("\n");
-                                        response = SerialPort.ReadTo("\r\n\r\n");
-                                        result = SerialPort.ReadTo("\r\n");
+                                        serialPort.ReadTo("\n");
+                                        response = serialPort.ReadTo("\r\n\r\n");
+                                        result = serialPort.ReadTo("\r\n");
                                     }
                                     else if (IsAscii(next))
                                     {
                                         response += Convert.ToChar(next);
-                                        response += SerialPort.ReadTo("\r\n");
-                                        result = SerialPort.ReadTo("\r");
+                                        response += serialPort.ReadTo("\r\n");
+                                        result = serialPort.ReadTo("\r");
                                     }
                                     break;
                                 }
@@ -407,16 +407,16 @@ namespace DS.GroundControl.Lib.Devices
                             case "ATV0":
                             case var str when str.StartsWith("AT+SBDWT="):
                                 {
-                                    var next = SerialPort.ReadChar();
+                                    var next = serialPort.ReadChar();
                                     if (IsCarriageReturn(next))
                                     {
-                                        SerialPort.ReadTo("\n");
-                                        result = SerialPort.ReadTo("\r\n");
+                                        serialPort.ReadTo("\n");
+                                        result = serialPort.ReadTo("\r\n");
                                     }
                                     else if (IsAscii(next))
                                     {
                                         result += Convert.ToChar(next);
-                                        result += SerialPort.ReadTo("\r");
+                                        result += serialPort.ReadTo("\r");
                                     }
                                     break;
                                 }
@@ -427,11 +427,11 @@ namespace DS.GroundControl.Lib.Devices
                     #region READY SBDRING
                     else if (IsCarriageReturn(command[0]) && IsLineFeed(command[1]))
                     {
-                        response = SerialPort.ReadTo("\r\n");
+                        response = serialPort.ReadTo("\r\n");
                         if (response != "SBDRING")
                         {
-                            SerialPort.ReadTo("\r\n");
-                            result = SerialPort.ReadTo("\r\n");
+                            serialPort.ReadTo("\r\n");
+                            result = serialPort.ReadTo("\r\n");
                         }
                         command = string.Empty;
                     }
@@ -441,8 +441,8 @@ namespace DS.GroundControl.Lib.Devices
                     else if (IsCarriageReturn(command[1]))
                     {
                         response += command[0];
-                        SerialPort.ReadTo("\n");
-                        result = SerialPort.ReadTo("\r");
+                        serialPort.ReadTo("\n");
+                        result = serialPort.ReadTo("\r");
                         command = string.Empty;
                     }
                     #endregion
@@ -450,7 +450,7 @@ namespace DS.GroundControl.Lib.Devices
                     #region READY SBDRING
                     else
                     {
-                        command += SerialPort.ReadTo("\r");
+                        command += serialPort.ReadTo("\r");
                         if (command == "126")
                         {
                             response = command;
@@ -458,18 +458,18 @@ namespace DS.GroundControl.Lib.Devices
                         }
                         else
                         {
-                            SerialPort.ReadTo("\n");
+                            serialPort.ReadTo("\n");
                             if (input.Length - 1 == command.Length)
                             {
-                                response = SerialPort.ReadTo("\r\n");
-                                SerialPort.ReadTo("\r\n");
-                                result = SerialPort.ReadTo("\r\n");
+                                response = serialPort.ReadTo("\r\n");
+                                serialPort.ReadTo("\r\n");
+                                result = serialPort.ReadTo("\r\n");
                             }
                             else
                             {
                                 response = command[command.Length - 1].ToString();
                                 command = command.Remove(command.Length - 1, 1);
-                                result = SerialPort.ReadTo("\r");
+                                result = serialPort.ReadTo("\r");
                             }
                         }
                     }
@@ -478,6 +478,13 @@ namespace DS.GroundControl.Lib.Devices
                     return (command, response, result);
                 });
             }
+
+            var output = RockBlockAsync(serialPort, input);
+            await output.ThrowOnTimeoutAsync(TimeSpan.FromMinutes(1));
+            return await output;
+        }
+        private static async Task<(string Command, string Response, string Result)> WriteToRockBlockAsync(SerialPort serialPort, byte[] input)
+        {
             static bool IsRingAlert(string response)
             {
                 return response is "SBDRING" or "126";
@@ -485,34 +492,28 @@ namespace DS.GroundControl.Lib.Devices
 
             while (true)
             {
-                var output = ExecuteAsync(input);
-                await output.ThrowOnTimeoutAsync(TimeSpan.FromMinutes(1));
-                if (IsRingAlert((await output).Response))
+                var output = await RockBlockAsync(serialPort, input);
+                if (IsRingAlert(output.Response))
                 {
                     input = null;
                     continue;
                 }
-                return await output;
+                return output;
             }
-        }
-        private async Task<(string Command, string Response, string Result)> WriteAsync(byte[] input, byte[] delimiter)
-        {
-            var arr = new byte[input.Length + delimiter.Length];
-            Buffer.BlockCopy(input, 0, arr, 0, input.Length);
-            Buffer.BlockCopy(delimiter, 0, arr, input.Length, delimiter.Length);
-            await Input.Writer.WriteAsync(arr, Stopped);
-            return await Output.Reader.ReadAsync(Stopped);
         }
         public async Task<(string Command, string Response, string Result)> WriteWithCarriageReturnAsync(string input)
         {
-            var delimiter = new byte[] { 0xD };
-            return await WriteAsync(Encoding.ASCII.GetBytes(input), delimiter);
+            var arr = Encoding.ASCII.GetBytes(input + "\r");
+            await Input.Writer.WriteAsync(arr, Stopped);
+            return await Output.Reader.ReadAsync(Stopped);
         }
         public async Task<(string Command, string Response, string Result)> WriteWithChecksumAsync(string input)
         {
-            var delimiter = CalculateChecksum(input);
-            return await WriteAsync(Encoding.ASCII.GetBytes(input), delimiter);
-        }    
+            var cks = CalculateChecksum(input);
+            var arr = Encoding.ASCII.GetBytes(input).Concat(cks).ToArray();
+            await Input.Writer.WriteAsync(arr, Stopped);
+            return await Output.Reader.ReadAsync(Stopped);
+        }
         private static string CalculateHexadecimalSummation(string input)
         {
             var hex = Convert.ToHexString(Encoding.ASCII.GetBytes(input));
@@ -544,6 +545,6 @@ namespace DS.GroundControl.Lib.Devices
             }
 
             return cks;
-        }
+        }       
     }
 }
