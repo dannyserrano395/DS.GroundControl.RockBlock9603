@@ -103,8 +103,8 @@ namespace DS.GroundControl.Lib.Devices
         {
             try
             {
-                var write = await RockBlockAsync(serialPort, Encoding.ASCII.GetBytes("AT\r"));
-                if (write is { Command: "AT", Result: "OK" or "0" })
+                var at = await RockBlockAsync(serialPort, Encoding.ASCII.GetBytes("AT\r"));
+                if (at is { Command: "AT", Response: "", Result: "OK" or "0" })
                 {
                     return true;
                 }
