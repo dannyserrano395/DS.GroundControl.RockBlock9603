@@ -1,5 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
-using DS.GroundControl.Lib.Devices.Factories;
+using DS.GroundControl.Lib.Factories;
 
 namespace DS.GroundControl.RockBlock9603.CommandLine
 {

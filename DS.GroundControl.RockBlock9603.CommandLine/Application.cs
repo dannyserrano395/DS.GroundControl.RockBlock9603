@@ -2,7 +2,7 @@
 using System.Text.Encodings.Web;
 using System.CommandLine;
 using DS.GroundControl.Lib.Devices;
-using DS.GroundControl.Lib.Devices.Factories;
+using DS.GroundControl.Lib.Factories;
 
 namespace DS.GroundControl.RockBlock9603.CommandLine
 {
@@ -146,7 +146,7 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
         }
         private async Task<string> RockBlockStopAsync()
         {
-            var tmp = RockBlock9603;
+            var rb = RockBlock9603;
             if (RockBlock9603 != null)
             {
                 await RockBlock9603.StopAsync();
@@ -156,11 +156,11 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
             {
                 ISU = new
                 {
-                    Canceled = tmp?.Canceled.IsCancellationRequested,
-                    Started = tmp?.Started.IsCancellationRequested,
-                    Running = tmp?.Running.IsCancellationRequested,
-                    Stopped = tmp?.Stopped.IsCancellationRequested,
-                    Faulted = tmp?.Faulted.IsCancellationRequested
+                    Canceled = rb?.Canceled.IsCancellationRequested,
+                    Started = rb?.Started.IsCancellationRequested,
+                    Running = rb?.Running.IsCancellationRequested,
+                    Stopped = rb?.Stopped.IsCancellationRequested,
+                    Faulted = rb?.Faulted.IsCancellationRequested
                 }
             });
         }

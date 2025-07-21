@@ -1,6 +1,7 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using DS.GroundControl.Lib.Devices;
+using Microsoft.Extensions.DependencyInjection;
 
-namespace DS.GroundControl.Lib.Devices.Factories
+namespace DS.GroundControl.Lib.Factories
 {
     public class RockBlock9603Factory : IRockBlock9603Factory
     {

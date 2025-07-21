@@ -2,9 +2,9 @@
 using System.Text.Encodings.Web;
 using DS.GroundControl.Lib.Devices;
 using DS.GroundControl.Lib.Extensions;
-using DS.GroundControl.Lib.Devices.Factories;
 using ILogger = DS.GroundControl.RockBlock9603.Service.Log4Net.ILogger;
 using IConfigurationManager = DS.GroundControl.RockBlock9603.Service.Configuration.IConfigurationManager;
+using DS.GroundControl.Lib.Factories;
 
 namespace DS.GroundControl.RockBlock9603.Service.Manager
 {

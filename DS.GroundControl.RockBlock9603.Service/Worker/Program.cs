@@ -1,12 +1,12 @@
 using log4net;
 using System.Reflection;
-using DS.GroundControl.Lib.Devices.Factories;
 using DS.GroundControl.RockBlock9603.Service.Factories;
 using DS.GroundControl.RockBlock9603.Service.Manager;
 using ILoggerFactory = DS.GroundControl.RockBlock9603.Service.Log4Net.ILoggerFactory;
 using LoggerFactory = DS.GroundControl.RockBlock9603.Service.Log4Net.LoggerFactory;
 using IConfigurationManager = DS.GroundControl.RockBlock9603.Service.Configuration.IConfigurationManager;
 using ConfigurationManager = DS.GroundControl.RockBlock9603.Service.Configuration.ConfigurationManager;
+using DS.GroundControl.Lib.Factories;
 
 namespace DS.GroundControl.RockBlock9603.Service.Worker
 {
