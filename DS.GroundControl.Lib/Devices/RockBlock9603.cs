@@ -143,8 +143,31 @@ namespace DS.GroundControl.Lib.Devices
                 command += Convert.ToChar(serialPort.ReadChar());
                 command += Convert.ToChar(serialPort.ReadChar());
 
-                #region AT Commands
-                if (command.StartsWith("AT", StringComparison.OrdinalIgnoreCase))
+                #region READY SBDRING
+                if (IsCarriageReturn(command[0]) && IsLineFeed(command[1]))
+                {
+                    response = serialPort.ReadTo("\r\n");
+                    if (response != "SBDRING")
+                    {
+                        serialPort.ReadTo("\r\n");
+                        result = serialPort.ReadTo("\r\n");
+                    }
+                    command = string.Empty;
+                }
+                #endregion
+
+                #region READY
+                else if (IsCarriageReturn(command[1]))
+                {
+                    response += command[0];
+                    serialPort.ReadTo("\n");
+                    result = serialPort.ReadTo("\r");
+                    command = string.Empty;
+                }
+                #endregion
+
+                #region AT READY SBDRING
+                else
                 {
                     command += serialPort.ReadTo("\r");
                     switch (command.ToUpper())
@@ -429,57 +452,33 @@ namespace DS.GroundControl.Lib.Devices
                                 }
                                 break;
                             }
-                    }
-                }
-                #endregion
-
-                #region READY SBDRING
-                else if (IsCarriageReturn(command[0]) && IsLineFeed(command[1]))
-                {
-                    response = serialPort.ReadTo("\r\n");
-                    if (response != "SBDRING")
-                    {
-                        serialPort.ReadTo("\r\n");
-                        result = serialPort.ReadTo("\r\n");
-                    }
-                    command = string.Empty;
-                }
-                #endregion
-
-                #region READY
-                else if (IsCarriageReturn(command[1]))
-                {
-                    response += command[0];
-                    serialPort.ReadTo("\n");
-                    result = serialPort.ReadTo("\r");
-                    command = string.Empty;
-                }
-                #endregion
-
-                #region READY SBDRING
-                else
-                {
-                    command += serialPort.ReadTo("\r");
-                    if (command == "126")
-                    {
-                        response = command;
-                        command = string.Empty;
-                    }
-                    else
-                    {
-                        serialPort.ReadTo("\n");
-                        if (input.Length - 1 == command.Length)
-                        {
-                            response = serialPort.ReadTo("\r\n");
-                            serialPort.ReadTo("\r\n");
-                            result = serialPort.ReadTo("\r\n");
-                        }
-                        else
-                        {
-                            response = command[command.Length - 1].ToString();
-                            command = command.Remove(command.Length - 1, 1);
-                            result = serialPort.ReadTo("\r");
-                        }
+                        default:
+                            {
+                                #region READY SBDRING
+                                if (command == "126")
+                                {
+                                    response = command;
+                                    command = string.Empty;
+                                }
+                                else
+                                {
+                                    serialPort.ReadTo("\n");
+                                    if (input.Length - 1 == command.Length)
+                                    {
+                                        response = serialPort.ReadTo("\r\n");
+                                        serialPort.ReadTo("\r\n");
+                                        result = serialPort.ReadTo("\r\n");
+                                    }
+                                    else
+                                    {
+                                        response = command[command.Length - 1].ToString();
+                                        command = command.Remove(command.Length - 1, 1);
+                                        result = serialPort.ReadTo("\r");
+                                    }
+                                }
+                                #endregion
+                                break;
+                            }
                     }
                 }
                 #endregion
