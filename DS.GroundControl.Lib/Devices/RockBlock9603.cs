@@ -114,8 +114,8 @@ namespace DS.GroundControl.Lib.Devices
         {
             try
             {
-                var at = await WriteToSerialPortAsync(serialPort, Encoding.ASCII.GetBytes("AT\r"));
-                if (at is { Command: "AT", Response: "", Result: "OK" or "0" })
+                var output = await WriteToSerialPortAsync(serialPort, Encoding.ASCII.GetBytes("AT\r"));
+                if (output is { Command: "AT", Response: "", Result: "OK" or "0" })
                 {
                     return true;
                 }
@@ -494,7 +494,7 @@ namespace DS.GroundControl.Lib.Devices
             while (true)
             {
                 var output = await WriteToSerialPortAsync(SerialPort, input);
-                if (output.Response is "SBDRING" or "126")
+                if (output is { Command: "", Response: "SBDRING" or "126", Result: "" }) 
                 {
                     input = null;
                     continue;
