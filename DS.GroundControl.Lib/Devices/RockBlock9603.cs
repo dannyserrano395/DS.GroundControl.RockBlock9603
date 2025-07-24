@@ -142,353 +142,348 @@ namespace DS.GroundControl.Lib.Devices
 
                 command += Convert.ToChar(serialPort.ReadChar());
                 command += Convert.ToChar(serialPort.ReadChar());
+                command += serialPort.ReadTo("\r");
 
-                #region AT
-                if (command.StartsWith("AT", StringComparison.OrdinalIgnoreCase))
+                switch (command.ToUpper())
                 {
-                    command += serialPort.ReadTo("\r");
-                    switch (command.ToUpper())
-                    {
-                        case "AT+CCLK?":
+                    case "AT+CCLK?":
+                        {
+                            var next = serialPort.ReadChar();
+                            if (IsCarriageReturn(next))
                             {
-                                var next = serialPort.ReadChar();
-                                if (IsCarriageReturn(next))
+                                serialPort.ReadTo("\n");
+                                response = serialPort.ReadTo("\n\r\n");
+                                serialPort.ReadTo("\r\n");
+                                result = serialPort.ReadTo("\r\n");
+                            }
+                            else if (IsAscii(next))
+                            {
+                                response += Convert.ToChar(next);
+                                response += serialPort.ReadTo("\n\r\n");
+                                result = serialPort.ReadTo("\r");
+                            }
+                            break;
+                        }
+                    case "AT+SBDRB":
+                        {
+                            var len = new byte[2];
+                            serialPort.ReadExactly(len, 0, 2);
+                            var msg = new byte[len[0] + len[1]];
+                            serialPort.ReadExactly(msg, 0, msg.Length);
+                            var cks = new byte[2];
+                            serialPort.ReadExactly(cks, 0, 2);
+
+                            var next = serialPort.ReadChar();
+                            if (IsCarriageReturn(next))
+                            {
+                                serialPort.ReadTo("\n");
+                                result = serialPort.ReadTo("\r\n");
+                                response = Encoding.ASCII.GetString(len.Concat(msg).Concat(cks).ToArray());
+                            }
+                            else if (IsAscii(next))
+                            {
+                                result += Convert.ToChar(next);
+                                result += serialPort.ReadTo("\r");
+                                response = Encoding.ASCII.GetString(len.Concat(msg).Concat(cks).ToArray());
+                            }
+                            break;
+                        }
+                    case "AT+SBDRT":
+                        {
+                            var next = serialPort.ReadChar();
+                            if (IsCarriageReturn(next))
+                            {
+                                serialPort.ReadTo("\n");
+                                response += serialPort.ReadTo("\r\n");
+                                response += serialPort.ReadTo("\r\n");
+                                result = serialPort.ReadTo("\r\n");
+                            }
+                            else if (IsAscii(next))
+                            {
+                                response += Convert.ToChar(next);
+                                response += serialPort.ReadTo("\r\n");
+                                response += serialPort.ReadTo("\r");
+                                result = response[response.Length - 1].ToString();
+                                response = response.Remove(response.Length - 1);
+                            }
+                            break;
+                        }
+                    case "AT+SBDWT":
+                    case var str when str.StartsWith("AT+SBDWB="):
+                        {
+                            var next = serialPort.ReadChar();
+                            if (IsCarriageReturn(next))
+                            {
+                                serialPort.ReadTo("\n");
+                                response = serialPort.ReadTo("\r\n");
+                            }
+                            else if (IsAscii(next))
+                            {
+                                response += Convert.ToChar(next);
+                                response += serialPort.ReadTo("\r\n");
+                            }
+                            break;
+                        }
+                    case "AT&V":
+                        {
+                            var next = serialPort.ReadChar();
+                            if (IsCarriageReturn(next))
+                            {
+                                serialPort.ReadTo("\n");
+                                int i = 0;
+                                while (true)
                                 {
+                                    result = serialPort.ReadTo("\r\n");
+                                    if (i == 10)
+                                    {
+                                        break;
+                                    }
                                     serialPort.ReadTo("\n");
-                                    response = serialPort.ReadTo("\n\r\n");
+                                    response += result;
+                                    i++;
+                                }
+                            }
+                            else if (IsAscii(next))
+                            {
+                                response += Convert.ToChar(next);
+                                int i = 0;
+                                while (true)
+                                {
+                                    result = serialPort.ReadTo("\r\n");
+                                    if (i == 9)
+                                    {
+                                        result = serialPort.ReadTo("\r");
+                                        break;
+                                    }
+                                    response += result;
+                                    i++;
+                                }
+                            }
+                            break;
+                        }
+                    case "AT+GMR":
+                    case "AT+CGMR":
+                        {
+                            var next = serialPort.ReadChar();
+                            if (IsCarriageReturn(next))
+                            {
+                                serialPort.ReadTo("\n");
+                                int i = 0;
+                                while (true)
+                                {
+                                    result = serialPort.ReadTo("\r\n");
+                                    if (i == 7)
+                                    {
+                                        break;
+                                    }
+                                    serialPort.ReadTo("\n");
+                                    response += result;
+                                    i++;
+                                }
+                            }
+                            else if (IsAscii(next))
+                            {
+                                response += Convert.ToChar(next);
+                                int i = 0;
+                                while (true)
+                                {
+                                    result = serialPort.ReadTo("\r\n");
+                                    if (i == 6)
+                                    {
+                                        result = serialPort.ReadTo("\r");
+                                        break;
+                                    }
+                                    response += result;
+                                    i++;
+                                }
+                            }
+                            break;
+                        }
+                    case "AT%R":
+                        {
+                            var next = serialPort.ReadChar();
+                            if (IsCarriageReturn(next))
+                            {
+                                serialPort.ReadTo("\n");
+                                int i = 0;
+                                while (true)
+                                {
+                                    result = serialPort.ReadTo("\r\n");
+                                    if (i == 66)
+                                    {
+                                        break;
+                                    }
+                                    serialPort.ReadTo("\n");
+                                    response += result;
+                                    i++;
+                                }
+                            }
+                            else if (IsAscii(next))
+                            {
+                                response += Convert.ToChar(next);
+                                int i = 0;
+                                while (true)
+                                {
+                                    result = serialPort.ReadTo("\r\n");
+                                    if (i == 65)
+                                    {
+                                        result = serialPort.ReadTo("\r");
+                                        break;
+                                    }
+                                    response += result;
+                                    i++;
+                                }
+                            }
+                            break;
+                        }
+                    case "AT+CGMI":
+                    case "AT+CGMM":
+                    case "AT+CGSN":
+                    case "AT+CIER=?":
+                    case "AT+CIER?":
+                    case "AT+CRIS":
+                    case "AT+CRISX":
+                    case "AT+CSQ":
+                    case "AT+CSQ=?":
+                    case "AT+CSQF":
+                    case "AT+CULK?":
+                    case "AT+GMI":
+                    case "AT+GMM":
+                    case "AT+GSN":
+                    case "AT+IPR=?":
+                    case "AT+IPR?":
+                    case "AT+SBDLOE":
+                    case "AT+SBDAREG=?":
+                    case "AT+SBDAREG?":
+                    case "AT+SBDC":
+                    case "AT+SBDD0":
+                    case "AT+SBDD1":
+                    case "AT+SBDD2":
+                    case "AT+SBDDSC?":
+                    case "AT+SBDGW":
+                    case "AT+SBDGWN":
+                    case "AT+SBDI":
+                    case "AT+SBDIX":
+                    case "AT+SBDIXA":
+                    case "AT+SBDMTA?":
+                    case "AT+SBDMTA=?":
+                    case "AT+SBDREG?":
+                    case "AT+SBDS":
+                    case "AT+SBDST?":
+                    case "AT+SBDSX":
+                    case "AT+SBDTC":
+                    case "AT-MSGEOS":
+                    case "AT-MSGEO":
+                    case "AT-MSSTM":
+                    case "ATI0":
+                    case "ATI1":
+                    case "ATI2":
+                    case "ATI3":
+                    case "ATI4":
+                    case "ATI5":
+                    case "ATI6":
+                    case "ATI7":
+                        {
+                            var next = serialPort.ReadChar();
+                            if (IsCarriageReturn(next))
+                            {
+                                serialPort.ReadTo("\n");
+                                response = serialPort.ReadTo("\r\n\r\n");
+                                result = serialPort.ReadTo("\r\n");
+                            }
+                            else if (IsAscii(next))
+                            {
+                                response += Convert.ToChar(next);
+                                response += serialPort.ReadTo("\r\n");
+                                result = serialPort.ReadTo("\r");
+                            }
+                            break;
+                        }
+                    case "AT&Y0":
+                    case "AT&K0":
+                    case "AT&K3":
+                    case "AT*R1":
+                    case "AT*F":
+                    case "AT+SBDMTA=0":
+                    case "AT+SBDMTA=1":
+                    case "ATE1":
+                    case "ATQ0":
+                    case "AT":
+                    case "ATV1":
+                    case "ATV0":
+                    case var str when str.StartsWith("AT+SBDWT="):
+                        {
+                            var next = serialPort.ReadChar();
+                            if (IsCarriageReturn(next))
+                            {
+                                serialPort.ReadTo("\n");
+                                result = serialPort.ReadTo("\r\n");
+                            }
+                            else if (IsAscii(next))
+                            {
+                                result += Convert.ToChar(next);
+                                result += serialPort.ReadTo("\r");
+                            }
+                            break;
+                        }
+                    default:
+                        {
+                            #region READY SBDRING
+                            if (IsCarriageReturn(command[0]) && IsLineFeed(command[1]))
+                            {
+                                response = command.Substring(2);
+                                serialPort.ReadTo("\n");
+                                if (response != "SBDRING")
+                                {
                                     serialPort.ReadTo("\r\n");
                                     result = serialPort.ReadTo("\r\n");
                                 }
-                                else if (IsAscii(next))
-                                {
-                                    response += Convert.ToChar(next);
-                                    response += serialPort.ReadTo("\n\r\n");
-                                    result = serialPort.ReadTo("\r");
-                                }
-                                break;
+                                command = string.Empty;
                             }
-                        case "AT+SBDRB":
+                            else
                             {
-                                var len = new byte[2];
-                                serialPort.ReadExactly(len, 0, 2);
-                                var msg = new byte[len[0] + len[1]];
-                                serialPort.ReadExactly(msg, 0, msg.Length);
-                                var cks = new byte[2];
-                                serialPort.ReadExactly(cks, 0, 2);
-
-                                var next = serialPort.ReadChar();
-                                if (IsCarriageReturn(next))
+                                if (IsCarriageReturn(command[1]))
                                 {
-                                    serialPort.ReadTo("\n");
-                                    result = serialPort.ReadTo("\r\n");
-                                    response = Encoding.ASCII.GetString(len.Concat(msg).Concat(cks).ToArray());
-                                }
-                                else if (IsAscii(next))
-                                {
-                                    result += Convert.ToChar(next);
-                                    result += serialPort.ReadTo("\r");
-                                    response = Encoding.ASCII.GetString(len.Concat(msg).Concat(cks).ToArray());
-                                }
-                                break;
-                            }
-                        case "AT+SBDRT":
-                            {
-                                var next = serialPort.ReadChar();
-                                if (IsCarriageReturn(next))
-                                {
-                                    serialPort.ReadTo("\n");
-                                    response += serialPort.ReadTo("\r\n");
-                                    response += serialPort.ReadTo("\r\n");
-                                    result = serialPort.ReadTo("\r\n");
-                                }
-                                else if (IsAscii(next))
-                                {
-                                    response += Convert.ToChar(next);
-                                    response += serialPort.ReadTo("\r\n");
-                                    response += serialPort.ReadTo("\r");
-                                    result = response[response.Length - 1].ToString();
-                                    response = response.Remove(response.Length - 1);
-                                }
-                                break;
-                            }
-                        case "AT+SBDWT":
-                        case var str when str.StartsWith("AT+SBDWB="):
-                            {
-                                var next = serialPort.ReadChar();
-                                if (IsCarriageReturn(next))
-                                {
-                                    serialPort.ReadTo("\n");
-                                    response = serialPort.ReadTo("\r\n");
-                                }
-                                else if (IsAscii(next))
-                                {
-                                    response += Convert.ToChar(next);
-                                    response += serialPort.ReadTo("\r\n");
-                                }
-                                break;
-                            }
-                        case "AT&V":
-                            {
-                                var next = serialPort.ReadChar();
-                                if (IsCarriageReturn(next))
-                                {
-                                    serialPort.ReadTo("\n");
-                                    int i = 0;
-                                    while (true)
+                                    if (serialPort.BytesToRead > 0)
                                     {
+                                        serialPort.ReadTo("\n\r\n");
+                                        response = command[command.Length - 1].ToString();
+                                        command = command[0].ToString();
                                         result = serialPort.ReadTo("\r\n");
-                                        if (i == 10)
-                                        {
-                                            break;
-                                        }
-                                        serialPort.ReadTo("\n");
-                                        response += result;
-                                        i++;
+                                    }
+                                    else
+                                    {
+                                        response = command[0].ToString();
+                                        result = command[command.Length - 1].ToString();
+                                        command = string.Empty;
                                     }
                                 }
-                                else if (IsAscii(next))
+                                else if (command == "126")
                                 {
-                                    response += Convert.ToChar(next);
-                                    int i = 0;
-                                    while (true)
-                                    {
-                                        result = serialPort.ReadTo("\r\n");
-                                        if (i == 9)
-                                        {
-                                            result = serialPort.ReadTo("\r");
-                                            break;
-                                        }
-                                        response += result;
-                                        i++;
-                                    }
+                                    response = command;
+                                    command = string.Empty;
                                 }
-                                break;
-                            }
-                        case "AT+GMR":
-                        case "AT+CGMR":
-                            {
-                                var next = serialPort.ReadChar();
-                                if (IsCarriageReturn(next))
+                                else
                                 {
                                     serialPort.ReadTo("\n");
-                                    int i = 0;
-                                    while (true)
+                                    if (input.Length - 1 == command.Length)
                                     {
+                                        response = serialPort.ReadTo("\r\n");
+                                        serialPort.ReadTo("\r\n");
                                         result = serialPort.ReadTo("\r\n");
-                                        if (i == 7)
-                                        {
-                                            break;
-                                        }
-                                        serialPort.ReadTo("\n");
-                                        response += result;
-                                        i++;
+                                    }
+                                    else
+                                    {
+                                        response = command[command.Length - 1].ToString();
+                                        command = command.Remove(command.Length - 1, 1);
+                                        result = serialPort.ReadTo("\r");
                                     }
                                 }
-                                else if (IsAscii(next))
-                                {
-                                    response += Convert.ToChar(next);
-                                    int i = 0;
-                                    while (true)
-                                    {
-                                        result = serialPort.ReadTo("\r\n");
-                                        if (i == 6)
-                                        {
-                                            result = serialPort.ReadTo("\r");
-                                            break;
-                                        }
-                                        response += result;
-                                        i++;
-                                    }
-                                }
-                                break;
                             }
-                        case "AT%R":
-                            {
-                                var next = serialPort.ReadChar();
-                                if (IsCarriageReturn(next))
-                                {
-                                    serialPort.ReadTo("\n");
-                                    int i = 0;
-                                    while (true)
-                                    {
-                                        result = serialPort.ReadTo("\r\n");
-                                        if (i == 66)
-                                        {
-                                            break;
-                                        }
-                                        serialPort.ReadTo("\n");
-                                        response += result;
-                                        i++;
-                                    }
-                                }
-                                else if (IsAscii(next))
-                                {
-                                    response += Convert.ToChar(next);
-                                    int i = 0;
-                                    while (true)
-                                    {
-                                        result = serialPort.ReadTo("\r\n");
-                                        if (i == 65)
-                                        {
-                                            result = serialPort.ReadTo("\r");
-                                            break;
-                                        }
-                                        response += result;
-                                        i++;
-                                    }
-                                }
-                                break;
-                            }
-                        case "AT+CGMI":
-                        case "AT+CGMM":
-                        case "AT+CGSN":
-                        case "AT+CIER=?":
-                        case "AT+CIER?":
-                        case "AT+CRIS":
-                        case "AT+CRISX":
-                        case "AT+CSQ":
-                        case "AT+CSQ=?":
-                        case "AT+CSQF":
-                        case "AT+CULK?":
-                        case "AT+GMI":
-                        case "AT+GMM":
-                        case "AT+GSN":
-                        case "AT+IPR=?":
-                        case "AT+IPR?":
-                        case "AT+SBDLOE":
-                        case "AT+SBDAREG=?":
-                        case "AT+SBDAREG?":
-                        case "AT+SBDC":
-                        case "AT+SBDD0":
-                        case "AT+SBDD1":
-                        case "AT+SBDD2":
-                        case "AT+SBDDSC?":
-                        case "AT+SBDGW":
-                        case "AT+SBDGWN":
-                        case "AT+SBDI":
-                        case "AT+SBDIX":
-                        case "AT+SBDIXA":
-                        case "AT+SBDMTA?":
-                        case "AT+SBDMTA=?":
-                        case "AT+SBDREG?":
-                        case "AT+SBDS":
-                        case "AT+SBDST?":
-                        case "AT+SBDSX":
-                        case "AT+SBDTC":
-                        case "AT-MSGEOS":
-                        case "AT-MSGEO":
-                        case "AT-MSSTM":
-                        case "ATI0":
-                        case "ATI1":
-                        case "ATI2":
-                        case "ATI3":
-                        case "ATI4":
-                        case "ATI5":
-                        case "ATI6":
-                        case "ATI7":
-                            {
-                                var next = serialPort.ReadChar();
-                                if (IsCarriageReturn(next))
-                                {
-                                    serialPort.ReadTo("\n");
-                                    response = serialPort.ReadTo("\r\n\r\n");
-                                    result = serialPort.ReadTo("\r\n");
-                                }
-                                else if (IsAscii(next))
-                                {
-                                    response += Convert.ToChar(next);
-                                    response += serialPort.ReadTo("\r\n");
-                                    result = serialPort.ReadTo("\r");
-                                }
-                                break;
-                            }
-                        case "AT&Y0":
-                        case "AT&K0":
-                        case "AT&K3":
-                        case "AT*R1":
-                        case "AT*F":
-                        case "AT+SBDMTA=0":
-                        case "AT+SBDMTA=1":
-                        case "ATE1":
-                        case "ATQ0":
-                        case "AT":
-                        case "ATV1":
-                        case "ATV0":
-                        case var str when str.StartsWith("AT+SBDWT="):
-                            {
-                                var next = serialPort.ReadChar();
-                                if (IsCarriageReturn(next))
-                                {
-                                    serialPort.ReadTo("\n");
-                                    result = serialPort.ReadTo("\r\n");
-                                }
-                                else if (IsAscii(next))
-                                {
-                                    result += Convert.ToChar(next);
-                                    result += serialPort.ReadTo("\r");
-                                }
-                                break;
-                            }
-                    }
+                            #endregion
+                            break;
+                        }
                 }
-                #endregion
-
-                #region READY SBDRING
-                else if (IsCarriageReturn(command[0]) && IsLineFeed(command[1]))
-                {
-                    response = serialPort.ReadTo("\r\n");
-                    if (response != "SBDRING")
-                    {
-                        serialPort.ReadTo("\r\n");
-                        result = serialPort.ReadTo("\r\n");
-                    }
-                    command = string.Empty;
-                }
-                #endregion
-
-                #region READY SBDRING
-                else
-                {
-                    command += serialPort.ReadTo("\r");
-                    if (IsCarriageReturn(command[1]))
-                    {
-                        if (serialPort.BytesToRead > 0)
-                        {                         
-                            serialPort.ReadTo("\n\r\n");
-                            response = command[command.Length - 1].ToString();
-                            command = command[0].ToString();
-                            result = serialPort.ReadTo("\r\n");
-                        }
-                        else
-                        {
-                            response = command[0].ToString();
-                            result = command[command.Length - 1].ToString();
-                            command = string.Empty;
-                        }
-                    }
-                    else if (command == "126")
-                    {
-                        response = command;
-                        command = string.Empty;
-                    }
-                    else
-                    {
-                        serialPort.ReadTo("\n");
-                        if (input.Length - 1 == command.Length)
-                        {
-                            response = serialPort.ReadTo("\r\n");
-                            serialPort.ReadTo("\r\n");
-                            result = serialPort.ReadTo("\r\n");
-                        }
-                        else
-                        {
-                            response = command[command.Length - 1].ToString();
-                            command = command.Remove(command.Length - 1, 1);
-                            result = serialPort.ReadTo("\r");
-                        }
-                    }
-                }
-                #endregion
 
                 return (command, response, result);
             });
