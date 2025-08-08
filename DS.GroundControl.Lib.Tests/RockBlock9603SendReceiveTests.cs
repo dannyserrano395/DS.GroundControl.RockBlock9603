@@ -5,16 +5,16 @@ namespace DS.GroundControl.Lib.Tests
 {
     public class RockBlock9603SendReceiveTests
     {
-        private IRockBlock9603 RockBlock9603;
+        private RockBlock9603 RockBlock9603;
 
         [OneTimeSetUp]
         public void Setup()
         {
             RockBlock9603 = new RockBlock9603();
-            RockBlock9603.StartAsync();
+            _ = RockBlock9603.ConnectAsync();
 
-            var running = RockBlock9603.Running.WhenCanceledAsync();
-            if (running.TimeoutAfter(TimeSpan.FromSeconds(10)))
+            var connected = RockBlock9603.Connected.WhenCanceledAsync();
+            if (connected.TimeoutAfter(TimeSpan.FromSeconds(10)))
             {
                 Assert.Fail();
             }
@@ -23,24 +23,22 @@ namespace DS.GroundControl.Lib.Tests
         [OneTimeTearDown]
         public void Teardown()
         {
-            RockBlock9603.StopAsync();
-            var stopped = RockBlock9603.Stopped.WhenCanceledAsync();
-            stopped.TimeoutAfter(TimeSpan.FromSeconds(10));
+            RockBlock9603.Dispose();
         }
 
         [Test]
         public async Task SendText_UsingSBDWTWithEqualsInVerboseMode_ReturnsOk()
         {
-            var v1 = await RockBlock9603.WriteWithCarriageReturnAsync("ATV1");
+            var v1 = await RockBlock9603.ExecuteAsync("ATV1");
             Assert.That(v1.Result, Is.EqualTo("OK"));
 
-            var sbdwt = await RockBlock9603.WriteWithCarriageReturnAsync("AT+SBDWT=test");
+            var sbdwt = await RockBlock9603.ExecuteAsync("AT+SBDWT=test");
             Assert.That(sbdwt.Result, Is.EqualTo("OK"));
 
-            var sbdtc = await RockBlock9603.WriteWithCarriageReturnAsync("AT+SBDTC");
+            var sbdtc = await RockBlock9603.ExecuteAsync("AT+SBDTC");
             Assert.That(sbdtc.Result, Is.EqualTo("OK"));
 
-            var sbdrt = await RockBlock9603.WriteWithCarriageReturnAsync("AT+SBDRT");
+            var sbdrt = await RockBlock9603.ExecuteAsync("AT+SBDRT");
             Assert.Multiple(() =>
             {
                 Assert.That(sbdrt.Command, Is.EqualTo("AT+SBDRT"));
@@ -51,16 +49,16 @@ namespace DS.GroundControl.Lib.Tests
         [Test]
         public async Task SendText_UsingSBDWTWithEqualsInNumericMode_ReturnsZero()
         {
-            var v0 = await RockBlock9603.WriteWithCarriageReturnAsync("ATV0");
+            var v0 = await RockBlock9603.ExecuteAsync("ATV0");
             Assert.That(v0.Result, Is.EqualTo("0"));
 
-            var sbdwt = await RockBlock9603.WriteWithCarriageReturnAsync("AT+SBDWT=test");
+            var sbdwt = await RockBlock9603.ExecuteAsync("AT+SBDWT=test");
             Assert.That(sbdwt.Result, Is.EqualTo("0"));
 
-            var sbdtc = await RockBlock9603.WriteWithCarriageReturnAsync("AT+SBDTC");
+            var sbdtc = await RockBlock9603.ExecuteAsync("AT+SBDTC");
             Assert.That(sbdtc.Result, Is.EqualTo("0"));
 
-            var sbdrt = await RockBlock9603.WriteWithCarriageReturnAsync("AT+SBDRT");
+            var sbdrt = await RockBlock9603.ExecuteAsync("AT+SBDRT");
             Assert.Multiple(() =>
             {
                 Assert.That(sbdrt.Command, Is.EqualTo("AT+SBDRT"));
@@ -71,23 +69,23 @@ namespace DS.GroundControl.Lib.Tests
         [Test]
         public async Task SendText_UsingSBDWTWithoutEqualsInVerboseMode_ReturnsOk()
         {
-            var v1 = await RockBlock9603.WriteWithCarriageReturnAsync("ATV1");
+            var v1 = await RockBlock9603.ExecuteAsync("ATV1");
             Assert.That(v1.Result, Is.EqualTo("OK"));
 
-            var sbdwt = await RockBlock9603.WriteWithCarriageReturnAsync("AT+SBDWT");
+            var sbdwt = await RockBlock9603.ExecuteAsync("AT+SBDWT");
             Assert.That(sbdwt.Response, Is.EqualTo("READY"));
 
-            var write = await RockBlock9603.WriteWithCarriageReturnAsync("test");
+            var write = await RockBlock9603.ExecuteReadyStateTextCommandAsync("test");
             Assert.Multiple(() =>
             {
                 Assert.That(write.Response, Is.EqualTo("0"));
                 Assert.That(write.Result, Is.EqualTo("OK"));
             });
 
-            var sbdtc = await RockBlock9603.WriteWithCarriageReturnAsync("AT+SBDTC");
+            var sbdtc = await RockBlock9603.ExecuteAsync("AT+SBDTC");
             Assert.That(sbdtc.Result, Is.EqualTo("OK"));
 
-            var sbdrt = await RockBlock9603.WriteWithCarriageReturnAsync("AT+SBDRT");
+            var sbdrt = await RockBlock9603.ExecuteAsync("AT+SBDRT");
             Assert.Multiple(() =>
             {
                 Assert.That(sbdrt.Command, Is.EqualTo("AT+SBDRT"));
@@ -98,23 +96,23 @@ namespace DS.GroundControl.Lib.Tests
         [Test]
         public async Task SendText_UsingSBDWTWithoutEqualsInNumericMode_ReturnsZero()
         {
-            var v0 = await RockBlock9603.WriteWithCarriageReturnAsync("ATV0");
+            var v0 = await RockBlock9603.ExecuteAsync("ATV0");
             Assert.That(v0.Result, Is.EqualTo("0"));
 
-            var sbdwt = await RockBlock9603.WriteWithCarriageReturnAsync("AT+SBDWT");
+            var sbdwt = await RockBlock9603.ExecuteAsync("AT+SBDWT");
             Assert.That(sbdwt.Response, Is.EqualTo("READY"));
 
-            var write = await RockBlock9603.WriteWithCarriageReturnAsync("test");
+            var write = await RockBlock9603.ExecuteReadyStateTextCommandAsync("test");
             Assert.Multiple(() =>
             {
                 Assert.That(write.Response, Is.EqualTo("0"));
                 Assert.That(write.Result, Is.EqualTo("0"));
             });
 
-            var sbdtc = await RockBlock9603.WriteWithCarriageReturnAsync("AT+SBDTC");
+            var sbdtc = await RockBlock9603.ExecuteAsync("AT+SBDTC");
             Assert.That(sbdtc.Result, Is.EqualTo("0"));
 
-            var sbdrt = await RockBlock9603.WriteWithCarriageReturnAsync("AT+SBDRT");
+            var sbdrt = await RockBlock9603.ExecuteAsync("AT+SBDRT");
             Assert.Multiple(() =>
             {
                 Assert.That(sbdrt.Command, Is.EqualTo("AT+SBDRT"));
@@ -125,23 +123,23 @@ namespace DS.GroundControl.Lib.Tests
         [Test]
         public async Task SendBinary_UsingSBDWBInVerboseMode_ReturnsOk()
         {
-            var v1 = await RockBlock9603.WriteWithCarriageReturnAsync("ATV1");
+            var v1 = await RockBlock9603.ExecuteAsync("ATV1");
             Assert.That(v1.Result, Is.EqualTo("OK"));
 
-            var sbdwb = await RockBlock9603.WriteWithCarriageReturnAsync("AT+SBDWB=4");
+            var sbdwb = await RockBlock9603.ExecuteAsync("AT+SBDWB=4");
             Assert.That(sbdwb.Response, Is.EqualTo("READY"));
 
-            var write = await RockBlock9603.WriteWithChecksumAsync("test");
+            var write = await RockBlock9603.ExecuteReadyStateBinaryCommandAsync("test");
             Assert.Multiple(() =>
             {
                 Assert.That(write.Response, Is.EqualTo("0"));
                 Assert.That(write.Result, Is.EqualTo("OK"));
             });
 
-            var sbdtc = await RockBlock9603.WriteWithCarriageReturnAsync("AT+SBDTC");
+            var sbdtc = await RockBlock9603.ExecuteAsync("AT+SBDTC");
             Assert.That(sbdtc.Result, Is.EqualTo("OK"));
 
-            var sbdrb = await RockBlock9603.WriteWithCarriageReturnAsync("AT+SBDRB");
+            var sbdrb = await RockBlock9603.ExecuteAsync("AT+SBDRB");
             Assert.Multiple(() =>
             {
                 Assert.That(sbdrb.Command, Is.EqualTo("AT+SBDRB"));
@@ -152,23 +150,23 @@ namespace DS.GroundControl.Lib.Tests
         [Test]
         public async Task SendBinary_UsingSBDWBInNumericMode_ReturnsZero()
         {
-            var v0 = await RockBlock9603.WriteWithCarriageReturnAsync("ATV0");
+            var v0 = await RockBlock9603.ExecuteAsync("ATV0");
             Assert.That(v0.Result, Is.EqualTo("0"));
 
-            var sbdwb = await RockBlock9603.WriteWithCarriageReturnAsync("AT+SBDWB=4");
+            var sbdwb = await RockBlock9603.ExecuteAsync("AT+SBDWB=4");
             Assert.That(sbdwb.Response, Is.EqualTo("READY"));
 
-            var write = await RockBlock9603.WriteWithChecksumAsync("test");
+            var write = await RockBlock9603.ExecuteReadyStateBinaryCommandAsync("test");
             Assert.Multiple(() =>
             {
                 Assert.That(write.Response, Is.EqualTo("0"));
                 Assert.That(write.Result, Is.EqualTo("0"));
             });
 
-            var sbdtc = await RockBlock9603.WriteWithCarriageReturnAsync("AT+SBDTC");
+            var sbdtc = await RockBlock9603.ExecuteAsync("AT+SBDTC");
             Assert.That(sbdtc.Result, Is.EqualTo("0"));
 
-            var sbdrb = await RockBlock9603.WriteWithCarriageReturnAsync("AT+SBDRB");
+            var sbdrb = await RockBlock9603.ExecuteAsync("AT+SBDRB");
             Assert.Multiple(() =>
             {
                 Assert.That(sbdrb.Command, Is.EqualTo("AT+SBDRB"));

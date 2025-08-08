@@ -1,12 +1,22 @@
-﻿namespace DS.GroundControl.Lib.Extensions
+﻿using System.Text;
+
+namespace DS.GroundControl.Lib.Extensions
 {
     public static class StreamExtensions
     {
-        public static async Task<string> ReadToEndAsync(this Stream stream)
+        public static async Task<string> ReadToAsync(this Stream stream, string value)
         {
-            stream.Seek(0, SeekOrigin.Begin);
-            using var reader = new StreamReader(stream);
-            return await reader.ReadToEndAsync();
+            var buffer = new byte[1];
+            var builder = new StringBuilder();
+            while (true)
+            {
+                await stream.ReadExactlyAsync(buffer, 0, 1);
+                builder.Append(buffer[0]);
+                if (builder.EndsWith(value))
+                {
+                    return builder.ToString(0, builder.Length - value.Length);
+                }
+            }
         }
     }
 }

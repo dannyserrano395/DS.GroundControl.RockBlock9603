@@ -1,120 +1,205 @@
-﻿using System.IO.Ports;
-using System.Text;
-using System.Threading.Channels;
+﻿using System.Text;
+using System.IO.Ports;
 using DS.GroundControl.Lib.Extensions;
-using DS.GroundControl.Lib.Exceptions;
 
 namespace DS.GroundControl.Lib.Devices
 {
     public class RockBlock9603 : IRockBlock9603
     {
         private SerialPort SerialPort { get; set; }
-        private Channel<byte[]> Input { get; }
-        private Channel<(string Command, string Response, string Result)> Output { get; }
-        private CancellationTokenSource CanceledSource { get; }
-        private CancellationTokenSource StartedSource { get; }
-        private CancellationTokenSource RunningSource { get; }
-        private CancellationTokenSource StoppedSource { get; }
+        private SemaphoreSlim SemaphoreSlim { get; set; }
+        private CancellationTokenSource ConnectedSource { get; }
         private CancellationTokenSource FaultedSource { get; }
-        public CancellationToken Canceled { get; }
-        public CancellationToken Started { get; }
-        public CancellationToken Running { get; }
-        public CancellationToken Stopped { get; }
+        public CancellationToken Connected { get; }
         public CancellationToken Faulted { get; }
 
         public RockBlock9603()
         {
-            Input = Channel.CreateUnbounded<byte[]>();
-            Output = Channel.CreateUnbounded<(string Command, string Response, string Result)>();
-            CanceledSource = new CancellationTokenSource();
-            StartedSource = new CancellationTokenSource();
-            RunningSource = new CancellationTokenSource();
-            StoppedSource = new CancellationTokenSource();
+            ConnectedSource = new CancellationTokenSource();
             FaultedSource = new CancellationTokenSource();
-            Canceled = CanceledSource.Token;
-            Started = StartedSource.Token;
-            Running = RunningSource.Token;
-            Stopped = StoppedSource.Token;
-            Faulted = FaultedSource.Token;          
+            Connected = ConnectedSource.Token;
+            Faulted = FaultedSource.Token;
         }
 
-        public async Task StartAsync()
-        {
-            _ = StartedSource.CancelAsync();
-            try
+        public async Task ConnectAsync()
+        {          
+            foreach (var name in SerialPort.GetPortNames())
             {
-                using (SerialPort = await ConnectSerialPortAsync())
-                {
-                    _ = RunningSource.CancelAsync();
-                    while (true)
-                    {
-                        var input = await Input.Reader.ReadAsync(Canceled);
-                        var output = await WriteAsync(input);
-                        await Output.Writer.WriteAsync(output);
-                    }
-                }
-            }
-            catch (OperationCanceledException) { }
-            catch (Exception)
-            {
-                _ = FaultedSource.CancelAsync();
-            }
-            _ = StoppedSource.CancelAsync();
-        }
-        public async Task StopAsync()
-        {
-            _ = CanceledSource.CancelAsync();
-            if (Started.IsCancellationRequested)
-            {
-                await Stopped.WhenCanceledAsync();
-            }
-            CanceledSource.Dispose();
-            StartedSource.Dispose();
-            RunningSource.Dispose();
-            StoppedSource.Dispose();
-            FaultedSource.Dispose();
-        }
-        private static async Task<SerialPort> ConnectSerialPortAsync()
-        {
-            foreach (var portName in SerialPort.GetPortNames())
-            {
+                var sp = new SerialPort();
                 try
                 {
-                    var serialPort = InstantiateSerialPort(portName);
-                    if (await ValidateSerialPortAsync(serialPort))
+                    sp.PortName = name;
+                    sp.BaudRate = 19200;
+                    sp.DataBits = 8;
+                    sp.Parity = Parity.None;
+                    sp.StopBits = StopBits.One;
+                    sp.Open();
+                    if (await TryValidateConnectionAsync(sp))
                     {
-                        return serialPort;
+                        SerialPort = sp;
+                        SemaphoreSlim = new SemaphoreSlim(1, 1);
+                        _ = ConnectedSource.CancelAsync();
+                        return;
                     }
-                    serialPort.Dispose();
                 }
                 catch { }
+                sp.Dispose();
             }
-            throw new DeviceNotFoundException();
+            _ = FaultedSource.CancelAsync();
         }
-        private static SerialPort InstantiateSerialPort(string portName)
+        public async Task<(string Command, string Response, string Result)> ExecuteAsync(string command)
         {
-            var serialPort = new SerialPort();
             try
             {
-                serialPort.PortName = portName;
-                serialPort.BaudRate = 19200;
-                serialPort.DataBits = 8;
-                serialPort.Parity = Parity.None;
-                serialPort.StopBits = StopBits.One;
-                serialPort.Open();
-                return serialPort;
+                await SemaphoreSlim.WaitAsync();
+                try
+                {
+                    return await ExecuteAsync(SerialPort, command);
+                }
+                finally
+                {
+                    SemaphoreSlim.Release();
+                }
             }
             catch
             {
-                serialPort.Dispose();
+                if (Connected.IsCancellationRequested)
+                {
+                    _ = FaultedSource.CancelAsync();
+                    SerialPort.Dispose();
+                }
                 throw;
             }
         }
-        private static async Task<bool> ValidateSerialPortAsync(SerialPort serialPort)
+        public async Task<(string Command, string Response, string Result)> ExecuteReadyStateTextCommandAsync(string command)
         {
             try
             {
-                var output = await WriteToSerialPortAsync(serialPort, Encoding.ASCII.GetBytes("AT\r"));
+                await SemaphoreSlim.WaitAsync();
+                try
+                {
+                    return await ExecuteReadyStateTextCommandAsync(SerialPort, command);
+                }
+                finally
+                {
+                    SemaphoreSlim.Release();
+                }
+            }
+            catch
+            {
+                if (Connected.IsCancellationRequested)
+                {
+                    _ = FaultedSource.CancelAsync();
+                    SerialPort.Dispose();
+                }
+                throw;
+            }
+        }
+        public async Task<(string Command, string Response, string Result)> ExecuteReadyStateBinaryCommandAsync(string command)
+        {
+            try
+            {
+                await SemaphoreSlim.WaitAsync();
+                try
+                {
+                    return await ExecuteReadyStateBinaryCommandAsync(SerialPort, command);
+                }
+                finally
+                {
+                    SemaphoreSlim.Release();
+                }
+            }
+            catch
+            {
+                if (Connected.IsCancellationRequested)
+                {
+                    _ = FaultedSource.CancelAsync();
+                    SerialPort.Dispose();
+                }
+                throw;
+            }
+        }
+
+        #region static
+        private static Dictionary<string, Func<SerialPort, string, (string Command, string Response, string Result)>> Commands { get; } =
+            new Dictionary<string, Func<SerialPort, string, (string Command, string Response, string Result)>>()
+            {
+                { "AT+CCLK?", ExecuteCCLKCurrentSettings },
+                { "AT+SBDRB", ExecuteSBDRB },
+                { "AT+SBDRT", ExecuteSBDRT },
+                { "AT+SBDWT", ExecuteSBDWT },
+                { "AT+SBDWB=", ExecuteSBDWB},
+                { "AT&V", ExecuteATAndV },
+                { "AT+GMR", ExecuteGMR },
+                { "AT+CGMR", ExecuteCGMR },
+                { "AT%R", ExecuteATPercentR },               
+                { "AT+CGMI", ExecuteResponseWithPayload },
+                { "AT+CGMM", ExecuteResponseWithPayload },
+                { "AT+CGSN", ExecuteResponseWithPayload },
+                { "AT+CIER=?", ExecuteResponseWithPayload },
+                { "AT+CIER?", ExecuteResponseWithPayload },
+                { "AT+CRIS", ExecuteResponseWithPayload },
+                { "AT+CRISX", ExecuteResponseWithPayload },
+                { "AT+CSQ", ExecuteResponseWithPayload },
+                { "AT+CSQ=?", ExecuteResponseWithPayload },
+                { "AT+CSQF", ExecuteResponseWithPayload },
+                { "AT+CULK?", ExecuteResponseWithPayload },
+                { "AT+GMI", ExecuteResponseWithPayload },
+                { "AT+GMM", ExecuteResponseWithPayload },
+                { "AT+GSN", ExecuteResponseWithPayload },
+                { "AT+IPR=?", ExecuteResponseWithPayload },
+                { "AT+IPR?", ExecuteResponseWithPayload },
+                { "AT+SBDLOE", ExecuteResponseWithPayload },
+                { "AT+SBDAREG=?", ExecuteResponseWithPayload },
+                { "AT+SBDAREG?", ExecuteResponseWithPayload },
+                { "AT+SBDC", ExecuteResponseWithPayload },
+                { "AT+SBDD0", ExecuteResponseWithPayload },
+                { "AT+SBDD1", ExecuteResponseWithPayload },
+                { "AT+SBDD2", ExecuteResponseWithPayload },
+                { "AT+SBDDSC?", ExecuteResponseWithPayload },
+                { "AT+SBDGW", ExecuteResponseWithPayload },
+                { "AT+SBDGWN", ExecuteResponseWithPayload },
+                { "AT+SBDI", ExecuteResponseWithPayload },
+                { "AT+SBDIX", ExecuteResponseWithPayload },
+                { "AT+SBDIXA", ExecuteResponseWithPayload },
+                { "AT+SBDMTA?", ExecuteResponseWithPayload },
+                { "AT+SBDMTA=?", ExecuteResponseWithPayload },
+                { "AT+SBDREG?", ExecuteResponseWithPayload },
+                { "AT+SBDS", ExecuteResponseWithPayload },
+                { "AT+SBDST?", ExecuteResponseWithPayload },
+                { "AT+SBDSX", ExecuteResponseWithPayload },
+                { "AT+SBDTC", ExecuteResponseWithPayload },
+                { "AT-MSGEOS", ExecuteResponseWithPayload },
+                { "AT-MSGEO", ExecuteResponseWithPayload },
+                { "AT-MSSTM", ExecuteResponseWithPayload },
+                { "ATI0", ExecuteResponseWithPayload },
+                { "ATI1", ExecuteResponseWithPayload },
+                { "ATI2", ExecuteResponseWithPayload },
+                { "ATI3", ExecuteResponseWithPayload },
+                { "ATI4", ExecuteResponseWithPayload },
+                { "ATI5", ExecuteResponseWithPayload },
+                { "ATI6", ExecuteResponseWithPayload },
+                { "AT+SBDWT=", ExecuteResponseWithoutPayload },
+                { "ATI7", ExecuteResponseWithoutPayload },
+                { "AT&Y0", ExecuteResponseWithoutPayload },
+                { "AT&K0", ExecuteResponseWithoutPayload },
+                { "AT&K3", ExecuteResponseWithoutPayload },
+                { "AT*R1", ExecuteResponseWithoutPayload },
+                { "AT*F", ExecuteResponseWithoutPayload },
+                { "AT+SBDMTA=0", ExecuteResponseWithoutPayload },
+                { "AT+SBDMTA=1", ExecuteResponseWithoutPayload },
+                { "ATE1", ExecuteResponseWithoutPayload },
+                { "ATQ0", ExecuteResponseWithoutPayload },
+                { "AT", ExecuteResponseWithoutPayload },
+                { "ATV1", ExecuteResponseWithoutPayload },
+                { "ATV0", ExecuteResponseWithoutPayload }
+            };
+
+        private static async Task<bool> TryValidateConnectionAsync(SerialPort sp)
+        {
+            try
+            {
+                var output = await ExecuteAsync(sp, "AT");
                 if (output is { Command: "AT", Response: "", Result: "OK" or "0" })
                 {
                     return true;
@@ -123,436 +208,619 @@ namespace DS.GroundControl.Lib.Devices
             catch { }
             return false;
         }
-        private static async Task<(string Command, string Response, string Result)> WriteToSerialPortAsync(SerialPort serialPort, byte[] input)
+        private static async Task<(string Command, string Response, string Result)> ExecuteAsync(SerialPort sp, string command)
         {
-            var output = Task.Run(() =>
+            var execute = Task.Run(() =>
             {
-                static bool IsAscii(int c) => (uint)c <= '\x007f';
-                static bool IsLineFeed(int c) => (uint)c == '\x000a';
-                static bool IsCarriageReturn(int c) => (uint)c == '\x000d';
-
-                var command = string.Empty;
-                var response = string.Empty;
-                var result = string.Empty;
-
-                if (input != null)
+                var cmd = command;
+                if (command.StartsWith("AT+SBDWT="))
                 {
-                    serialPort.Write(input, 0, input.Length);
+                    cmd = "AT+SBDWT=";
                 }
-
-                command += Convert.ToChar(serialPort.ReadChar());
-                command += Convert.ToChar(serialPort.ReadChar());
-                command += serialPort.ReadTo("\r");
-
-                switch (command.ToUpper())
+                else if (command.StartsWith("AT+SBDWB="))
                 {
-                    case "AT+CCLK?":
-                        {
-                            var next = serialPort.ReadChar();
-                            if (IsCarriageReturn(next))
-                            {
-                                serialPort.ReadTo("\n");
-                                response = serialPort.ReadTo("\n\r\n");
-                                serialPort.ReadTo("\r\n");
-                                result = serialPort.ReadTo("\r\n");
-                            }
-                            else if (IsAscii(next))
-                            {
-                                response += Convert.ToChar(next);
-                                response += serialPort.ReadTo("\n\r\n");
-                                result = serialPort.ReadTo("\r");
-                            }
-                            break;
-                        }
-                    case "AT+SBDRB":
-                        {
-                            var len = new byte[2];
-                            serialPort.ReadExactly(len, 0, 2);
-                            var msg = new byte[len[0] + len[1]];
-                            serialPort.ReadExactly(msg, 0, msg.Length);
-                            var cks = new byte[2];
-                            serialPort.ReadExactly(cks, 0, 2);
-
-                            var next = serialPort.ReadChar();
-                            if (IsCarriageReturn(next))
-                            {
-                                serialPort.ReadTo("\n");
-                                result = serialPort.ReadTo("\r\n");
-                                response = Encoding.ASCII.GetString(len.Concat(msg).Concat(cks).ToArray());
-                            }
-                            else if (IsAscii(next))
-                            {
-                                result += Convert.ToChar(next);
-                                result += serialPort.ReadTo("\r");
-                                response = Encoding.ASCII.GetString(len.Concat(msg).Concat(cks).ToArray());
-                            }
-                            break;
-                        }
-                    case "AT+SBDRT":
-                        {
-                            var next = serialPort.ReadChar();
-                            if (IsCarriageReturn(next))
-                            {
-                                serialPort.ReadTo("\n");
-                                response += serialPort.ReadTo("\r\n");
-                                response += serialPort.ReadTo("\r\n");
-                                result = serialPort.ReadTo("\r\n");
-                            }
-                            else if (IsAscii(next))
-                            {
-                                response += Convert.ToChar(next);
-                                response += serialPort.ReadTo("\r\n");
-                                response += serialPort.ReadTo("\r");
-                                result = response[response.Length - 1].ToString();
-                                response = response.Remove(response.Length - 1);
-                            }
-                            break;
-                        }
-                    case "AT+SBDWT":
-                    case var str when str.StartsWith("AT+SBDWB="):
-                        {
-                            var next = serialPort.ReadChar();
-                            if (IsCarriageReturn(next))
-                            {
-                                serialPort.ReadTo("\n");
-                                response = serialPort.ReadTo("\r\n");
-                            }
-                            else if (IsAscii(next))
-                            {
-                                response += Convert.ToChar(next);
-                                response += serialPort.ReadTo("\r\n");
-                            }
-                            break;
-                        }
-                    case "AT&V":
-                        {
-                            var next = serialPort.ReadChar();
-                            if (IsCarriageReturn(next))
-                            {
-                                serialPort.ReadTo("\n");
-                                int i = 0;
-                                while (true)
-                                {
-                                    result = serialPort.ReadTo("\r\n");
-                                    if (i == 10)
-                                    {
-                                        break;
-                                    }
-                                    serialPort.ReadTo("\n");
-                                    response += result;
-                                    i++;
-                                }
-                            }
-                            else if (IsAscii(next))
-                            {
-                                response += Convert.ToChar(next);
-                                int i = 0;
-                                while (true)
-                                {
-                                    result = serialPort.ReadTo("\r\n");
-                                    if (i == 9)
-                                    {
-                                        result = serialPort.ReadTo("\r");
-                                        break;
-                                    }
-                                    response += result;
-                                    i++;
-                                }
-                            }
-                            break;
-                        }
-                    case "AT+GMR":
-                    case "AT+CGMR":
-                        {
-                            var next = serialPort.ReadChar();
-                            if (IsCarriageReturn(next))
-                            {
-                                serialPort.ReadTo("\n");
-                                int i = 0;
-                                while (true)
-                                {
-                                    result = serialPort.ReadTo("\r\n");
-                                    if (i == 7)
-                                    {
-                                        break;
-                                    }
-                                    serialPort.ReadTo("\n");
-                                    response += result;
-                                    i++;
-                                }
-                            }
-                            else if (IsAscii(next))
-                            {
-                                response += Convert.ToChar(next);
-                                int i = 0;
-                                while (true)
-                                {
-                                    result = serialPort.ReadTo("\r\n");
-                                    if (i == 6)
-                                    {
-                                        result = serialPort.ReadTo("\r");
-                                        break;
-                                    }
-                                    response += result;
-                                    i++;
-                                }
-                            }
-                            break;
-                        }
-                    case "AT%R":
-                        {
-                            var next = serialPort.ReadChar();
-                            if (IsCarriageReturn(next))
-                            {
-                                serialPort.ReadTo("\n");
-                                int i = 0;
-                                while (true)
-                                {
-                                    result = serialPort.ReadTo("\r\n");
-                                    if (i == 66)
-                                    {
-                                        break;
-                                    }
-                                    serialPort.ReadTo("\n");
-                                    response += result;
-                                    i++;
-                                }
-                            }
-                            else if (IsAscii(next))
-                            {
-                                response += Convert.ToChar(next);
-                                int i = 0;
-                                while (true)
-                                {
-                                    result = serialPort.ReadTo("\r\n");
-                                    if (i == 65)
-                                    {
-                                        result = serialPort.ReadTo("\r");
-                                        break;
-                                    }
-                                    response += result;
-                                    i++;
-                                }
-                            }
-                            break;
-                        }
-                    case "AT+CGMI":
-                    case "AT+CGMM":
-                    case "AT+CGSN":
-                    case "AT+CIER=?":
-                    case "AT+CIER?":
-                    case "AT+CRIS":
-                    case "AT+CRISX":
-                    case "AT+CSQ":
-                    case "AT+CSQ=?":
-                    case "AT+CSQF":
-                    case "AT+CULK?":
-                    case "AT+GMI":
-                    case "AT+GMM":
-                    case "AT+GSN":
-                    case "AT+IPR=?":
-                    case "AT+IPR?":
-                    case "AT+SBDLOE":
-                    case "AT+SBDAREG=?":
-                    case "AT+SBDAREG?":
-                    case "AT+SBDC":
-                    case "AT+SBDD0":
-                    case "AT+SBDD1":
-                    case "AT+SBDD2":
-                    case "AT+SBDDSC?":
-                    case "AT+SBDGW":
-                    case "AT+SBDGWN":
-                    case "AT+SBDI":
-                    case "AT+SBDIX":
-                    case "AT+SBDIXA":
-                    case "AT+SBDMTA?":
-                    case "AT+SBDMTA=?":
-                    case "AT+SBDREG?":
-                    case "AT+SBDS":
-                    case "AT+SBDST?":
-                    case "AT+SBDSX":
-                    case "AT+SBDTC":
-                    case "AT-MSGEOS":
-                    case "AT-MSGEO":
-                    case "AT-MSSTM":
-                    case "ATI0":
-                    case "ATI1":
-                    case "ATI2":
-                    case "ATI3":
-                    case "ATI4":
-                    case "ATI5":
-                    case "ATI6":
-                    case "ATI7":
-                        {
-                            var next = serialPort.ReadChar();
-                            if (IsCarriageReturn(next))
-                            {
-                                serialPort.ReadTo("\n");
-                                response = serialPort.ReadTo("\r\n\r\n");
-                                result = serialPort.ReadTo("\r\n");
-                            }
-                            else if (IsAscii(next))
-                            {
-                                response += Convert.ToChar(next);
-                                response += serialPort.ReadTo("\r\n");
-                                result = serialPort.ReadTo("\r");
-                            }
-                            break;
-                        }
-                    case "AT&Y0":
-                    case "AT&K0":
-                    case "AT&K3":
-                    case "AT*R1":
-                    case "AT*F":
-                    case "AT+SBDMTA=0":
-                    case "AT+SBDMTA=1":
-                    case "ATE1":
-                    case "ATQ0":
-                    case "AT":
-                    case "ATV1":
-                    case "ATV0":
-                    case var str when str.StartsWith("AT+SBDWT="):
-                        {
-                            var next = serialPort.ReadChar();
-                            if (IsCarriageReturn(next))
-                            {
-                                serialPort.ReadTo("\n");
-                                result = serialPort.ReadTo("\r\n");
-                            }
-                            else if (IsAscii(next))
-                            {
-                                result += Convert.ToChar(next);
-                                result += serialPort.ReadTo("\r");
-                            }
-                            break;
-                        }
-                    default:
-                        {
-                            #region READY SBDRING
-                            if (IsCarriageReturn(command[0]) && IsLineFeed(command[1]))
-                            {
-                                response = command.Substring(2);
-                                serialPort.ReadTo("\n");
-                                if (response != "SBDRING")
-                                {
-                                    serialPort.ReadTo("\r\n");
-                                    result = serialPort.ReadTo("\r\n");
-                                }
-                                command = string.Empty;
-                            }
-                            else
-                            {
-                                if (IsCarriageReturn(command[1]))
-                                {
-                                    if (serialPort.BytesToRead > 0)
-                                    {
-                                        serialPort.ReadTo("\n\r\n");
-                                        response = command[command.Length - 1].ToString();
-                                        command = command[0].ToString();
-                                        result = serialPort.ReadTo("\r\n");
-                                    }
-                                    else
-                                    {
-                                        response = command[0].ToString();
-                                        result = command[command.Length - 1].ToString();
-                                        command = string.Empty;
-                                    }
-                                }
-                                else if (command == "126")
-                                {
-                                    response = command;
-                                    command = string.Empty;
-                                }
-                                else
-                                {
-                                    serialPort.ReadTo("\n");
-                                    if (input.Length - 1 == command.Length)
-                                    {
-                                        response = serialPort.ReadTo("\r\n");
-                                        serialPort.ReadTo("\r\n");
-                                        result = serialPort.ReadTo("\r\n");
-                                    }
-                                    else
-                                    {
-                                        response = command[command.Length - 1].ToString();
-                                        command = command.Remove(command.Length - 1, 1);
-                                        result = serialPort.ReadTo("\r");
-                                    }
-                                }
-                            }
-                            #endregion
-                            break;
-                        }
+                    cmd = "AT+SBDWB=";
                 }
-
-                return (command, response, result);
+                var func = Commands[cmd];
+                return func(sp, command);
             });
-            await output.ThrowOnTimeoutAsync(TimeSpan.FromMinutes(1));
-            return await output;
+            await execute.ThrowOnTimeoutAsync(TimeSpan.FromMinutes(1));
+            return await execute;
         }
-        private async Task<(string Command, string Response, string Result)> WriteAsync(byte[] input)
+        private static async Task<(string Command, string Response, string Result)> ExecuteReadyStateTextCommandAsync(SerialPort sp, string command)
         {
+            var execute = Task.Run(() =>
+            {
+                return ExecuteReadyStateTextCommand(sp, command);
+            });
+            await execute.ThrowOnTimeoutAsync(TimeSpan.FromMinutes(1));
+            return await execute;
+        }
+        private static async Task<(string Command, string Response, string Result)> ExecuteReadyStateBinaryCommandAsync(SerialPort sp, string command)
+        {
+            var execute = Task.Run(() =>
+            {
+                return ExecuteReadyStateBinaryCommand(sp, command);
+            });
+            await execute.ThrowOnTimeoutAsync(TimeSpan.FromMinutes(1));
+            return await execute;
+        }
+        private static (string Command, string Response, string Result) ExecuteReadyStateTextCommand(SerialPort sp, string command)
+        {
+            var bytes = Encoding.ASCII.GetBytes(command + '\r');
+            sp.Write(bytes, 0, bytes.Length);
+
+            var cmd = sp.ReadTo("\r");
+            if (command.Length == cmd.Length) // ATV1 + AT+SBDWT + message
+            {
+                cmd = cmd.Substring(0, cmd.Length - 1);
+                sp.ReadTo("\n");
+                var response = sp.ReadTo("\r\n");
+                sp.ReadTo("\r\n");
+                var result = sp.ReadTo("\r\n");
+                return (cmd, response, result);
+            }
+            else // ATV0 + AT+SBDWT + message 
+            {
+                var response = cmd[cmd.Length - 1].ToString();
+                cmd = cmd.Substring(0, cmd.Length - 1);
+                sp.ReadTo("\n");
+                var result = sp.ReadTo("\r");
+                return (cmd, response, result);
+            }
+        }
+        private static (string Command, string Response, string Result) ExecuteReadyStateBinaryCommand(SerialPort sp, string command)
+        {
+            var cks = CalculateChecksum(command);
+            var bytes = Encoding.ASCII.GetBytes(command).Concat(cks).ToArray();
+            sp.Write(bytes, 0, bytes.Length);
+
+            var next = sp.ReadChar();
+            if (IsCarriageReturn(next)) // ATV1 + AT+SBDWB= + message
+            {
+                var response = sp.ReadTo("\r\n");
+                sp.ReadTo("\r\n");
+                response = response[response.Length - 1].ToString();
+                var result = sp.ReadTo("\r\n");
+                return (string.Empty, response, result);
+            }
+            else // ATV0 + AT+SBDWB= + message
+            {
+                var response = Convert.ToChar(next).ToString();
+                sp.ReadTo("\r\n");
+                var result = sp.ReadTo("\r");           
+                return (string.Empty, response, result);
+            }
+        }
+        private static (string Command, string Response, string Result) ExecuteCCLKCurrentSettings(SerialPort sp, string command)
+        {
+            var bytes = Encoding.ASCII.GetBytes(command + '\r');
+            sp.Write(bytes, 0, bytes.Length);
             while (true)
             {
-                var output = await WriteToSerialPortAsync(SerialPort, input);
-                if (output is { Command: "", Response: "SBDRING" or "126", Result: "" }) 
+                var result = string.Empty;
+                var response = string.Empty;
+                var cmd = sp.ReadTo("\r");
+                if (cmd == command)
                 {
-                    input = null;
+                    var next = sp.ReadChar();
+                    if (IsCarriageReturn(next))
+                    {
+                        sp.ReadTo("\n");
+                        response = sp.ReadTo("\n\r\n");
+                        sp.ReadTo("\r\n");
+                        result = sp.ReadTo("\r\n");
+                    }
+                    else if (IsAscii(next))
+                    {
+                        response += Convert.ToChar(next);
+                        response += sp.ReadTo("\n\r\n");
+                        result = sp.ReadTo("\r");
+                    }
+                }
+                else
+                {
+                    if (cmd != "126")
+                    {
+                        sp.ReadTo("\n");
+                        sp.ReadTo("\r\n");
+                    }
                     continue;
                 }
-                return output;
+                return (cmd, response, result);
             }
         }
-        public async Task<(string Command, string Response, string Result)> WriteWithCarriageReturnAsync(string input)
+        private static (string Command, string Response, string Result) ExecuteSBDRB(SerialPort sp, string command)
         {
-            var arr = Encoding.ASCII.GetBytes(input + "\r");
-            await Input.Writer.WriteAsync(arr, Stopped);
-            return await Output.Reader.ReadAsync(Stopped);
+            var bytes = Encoding.ASCII.GetBytes(command + '\r');
+            sp.Write(bytes, 0, bytes.Length);
+            while (true)
+            {
+                var result = string.Empty;
+                var response = string.Empty;
+                var cmd = sp.ReadTo("\r");
+                if (cmd == command)
+                {
+                    var len = new byte[2];
+                    sp.ReadExactly(len, 0, 2);
+                    var msg = new byte[(len[0] << 8) | len[1]];
+                    sp.ReadExactly(msg, 0, msg.Length);
+                    var cks = new byte[2];
+                    sp.ReadExactly(cks, 0, 2);
+
+                    var next = sp.ReadChar();
+                    if (IsCarriageReturn(next))
+                    {
+                        sp.ReadTo("\n");
+                        result = sp.ReadTo("\r\n");
+                        response = Encoding.ASCII.GetString(len.Concat(msg).Concat(cks).ToArray());
+                    }
+                    else if (IsAscii(next))
+                    {
+                        result += Convert.ToChar(next);
+                        result += sp.ReadTo("\r");
+                        response = Encoding.ASCII.GetString(len.Concat(msg).Concat(cks).ToArray());
+                    }
+                }
+                else
+                {
+                    if (cmd != "126")
+                    {
+                        sp.ReadTo("\n");
+                        sp.ReadTo("\r\n");
+                    }
+                    continue;
+                }
+                return (cmd, response, result);
+            }
         }
-        public async Task<(string Command, string Response, string Result)> WriteWithChecksumAsync(string input)
+        private static (string Command, string Response, string Result) ExecuteSBDRT(SerialPort sp, string command)
         {
-            var cks = CalculateChecksum(input);
-            var arr = Encoding.ASCII.GetBytes(input).Concat(cks).ToArray();
-            await Input.Writer.WriteAsync(arr, Stopped);
-            return await Output.Reader.ReadAsync(Stopped);
+            var bytes = Encoding.ASCII.GetBytes(command + '\r');
+            sp.Write(bytes, 0, bytes.Length);
+            while (true)
+            {
+                var result = string.Empty;
+                var response = string.Empty;
+                var cmd = sp.ReadTo("\r");
+                if (cmd == command)
+                {
+                    var next = sp.ReadChar();
+                    if (IsCarriageReturn(next))
+                    {
+                        sp.ReadTo("\n");
+                        response += sp.ReadTo("\r\n");
+                        response += sp.ReadTo("\r\n");
+                        result = sp.ReadTo("\r\n");
+                    }
+                    else if (IsAscii(next))
+                    {
+                        response += Convert.ToChar(next);
+                        response += sp.ReadTo("\r\n");
+                        response += sp.ReadTo("\r");
+                        result = response[response.Length - 1].ToString();
+                        response = response.Remove(response.Length - 1);
+                    }
+                }
+                else
+                {
+                    if (cmd != "126")
+                    {
+                        sp.ReadTo("\n");
+                        sp.ReadTo("\r\n");
+                    }
+                    continue;
+                }
+                return (cmd, response, result);
+            }
         }
-        private static string CalculateHexadecimalSummation(string input)
+        private static (string Command, string Response, string Result) ExecuteSBDWT(SerialPort sp, string command)
         {
-            var hex = Convert.ToHexString(Encoding.ASCII.GetBytes(input));
-
-            int result = 0;
-            for (int i = 0; i < hex.Length; i += 2)
+            var bytes = Encoding.ASCII.GetBytes(command + '\r');
+            sp.Write(bytes, 0, bytes.Length);
+            while (true)
             {
-                var value = hex[i].ToString() + hex[i + 1].ToString();
-                result += Convert.ToInt32(value, 16);
+                var result = string.Empty;
+                var response = string.Empty;
+                var cmd = sp.ReadTo("\r");
+                if (cmd == command)
+                {
+                    var next = sp.ReadChar();
+                    if (IsCarriageReturn(next))
+                    {
+                        sp.ReadTo("\n");
+                        response = sp.ReadTo("\r\n");
+                    }
+                    else if (IsAscii(next))
+                    {
+                        response += Convert.ToChar(next);
+                        response += sp.ReadTo("\r\n");
+                    }
+                }
+                else
+                {
+                    if (cmd != "126")
+                    {
+                        sp.ReadTo("\n");
+                        sp.ReadTo("\r\n");
+                    }
+                    continue;
+                }
+                return (cmd, response, result);
             }
-
-            var sum = result.ToString("X");
-            if (sum.Length % 2 == 1)
-            {
-                sum = "0" + sum;
-            }
-
-            return sum;
         }
-        private static byte[] CalculateChecksum(string input)
+        private static (string Command, string Response, string Result) ExecuteSBDWB(SerialPort sp, string command)
         {
-            var cks = new byte[2];
-            var sum = CalculateHexadecimalSummation(input);
-
-            for (int i = 0, j = 0; i < sum.Length && i < 4; i += 2, j++)
+            var bytes = Encoding.ASCII.GetBytes(command + '\r');
+            sp.Write(bytes, 0, bytes.Length);
+            while (true)
             {
-                var value = sum[i].ToString() + sum[i + 1].ToString();
-                cks[j] = Convert.ToByte(value, 16);
+                var result = string.Empty;
+                var response = string.Empty;
+                var cmd = sp.ReadTo("\r");
+                if (cmd == command)
+                {
+                    var next = sp.ReadChar();
+                    if (IsCarriageReturn(next))
+                    {
+                        sp.ReadTo("\n");
+                        response = sp.ReadTo("\r\n");
+                    }
+                    else if (IsAscii(next))
+                    {
+                        response += Convert.ToChar(next);
+                        response += sp.ReadTo("\r\n");
+                    }
+                }
+                else
+                {
+                    if (cmd != "126")
+                    {
+                        sp.ReadTo("\n");
+                        sp.ReadTo("\r\n");
+                    }
+                    continue;
+                }
+                return (cmd, response, result);
             }
-
-            if (cks[1] == 0)
+        }
+        private static (string Command, string Response, string Result) ExecuteATAndV(SerialPort sp, string command)
+        {
+            var bytes = Encoding.ASCII.GetBytes(command + '\r');
+            sp.Write(bytes, 0, bytes.Length);
+            while (true)
             {
-                cks[1] = cks[0];
-                cks[0] = 0;
+                var result = string.Empty;
+                var response = string.Empty;
+                var cmd = sp.ReadTo("\r");
+                if (cmd == command)
+                {
+                    var next = sp.ReadChar();
+                    if (IsCarriageReturn(next))
+                    {
+                        sp.ReadTo("\n");
+                        int i = 0;
+                        while (true)
+                        {
+                            result = sp.ReadTo("\r\n");
+                            if (i == 10)
+                            {
+                                break;
+                            }
+                            sp.ReadTo("\n");
+                            response += result;
+                            i++;
+                        }
+                    }
+                    else if (IsAscii(next))
+                    {
+                        response += Convert.ToChar(next);
+                        int i = 0;
+                        while (true)
+                        {
+                            result = sp.ReadTo("\r\n");
+                            if (i == 9)
+                            {
+                                result = sp.ReadTo("\r");
+                                break;
+                            }
+                            response += result;
+                            i++;
+                        }
+                    }
+                }
+                else
+                {
+                    if (cmd != "126")
+                    {
+                        sp.ReadTo("\n");
+                        sp.ReadTo("\r\n");
+                    }
+                    continue;
+                }
+                return (cmd, response, result);
             }
-
-            return cks;
+        }
+        private static (string Command, string Response, string Result) ExecuteGMR(SerialPort sp, string command)
+        {
+            var bytes = Encoding.ASCII.GetBytes(command + '\r');
+            sp.Write(bytes, 0, bytes.Length);
+            while (true)
+            {
+                var result = string.Empty;
+                var response = string.Empty;
+                var cmd = sp.ReadTo("\r");
+                if (cmd == command)
+                {
+                    var next = sp.ReadChar();
+                    if (IsCarriageReturn(next))
+                    {
+                        sp.ReadTo("\n");
+                        int i = 0;
+                        while (true)
+                        {
+                            result = sp.ReadTo("\r\n");
+                            if (i == 7)
+                            {
+                                break;
+                            }
+                            sp.ReadTo("\n");
+                            response += result;
+                            i++;
+                        }
+                    }
+                    else if (IsAscii(next))
+                    {
+                        response += Convert.ToChar(next);
+                        int i = 0;
+                        while (true)
+                        {
+                            result = sp.ReadTo("\r\n");
+                            if (i == 6)
+                            {
+                                result = sp.ReadTo("\r");
+                                break;
+                            }
+                            response += result;
+                            i++;
+                        }
+                    }
+                }
+                else
+                {
+                    if (cmd != "126")
+                    {
+                        sp.ReadTo("\n");
+                        sp.ReadTo("\r\n");
+                    }
+                    continue;
+                }
+                return (cmd, response, result);
+            }
+        }
+        private static (string Command, string Response, string Result) ExecuteCGMR(SerialPort sp, string command)
+        {
+            var bytes = Encoding.ASCII.GetBytes(command + '\r');
+            sp.Write(bytes, 0, bytes.Length);
+            while (true)
+            {
+                var result = string.Empty;
+                var response = string.Empty;
+                var cmd = sp.ReadTo("\r");
+                if (cmd == command)
+                {
+                    var next = sp.ReadChar();
+                    if (IsCarriageReturn(next))
+                    {
+                        sp.ReadTo("\n");
+                        int i = 0;
+                        while (true)
+                        {
+                            result = sp.ReadTo("\r\n");
+                            if (i == 7)
+                            {
+                                break;
+                            }
+                            sp.ReadTo("\n");
+                            response += result;
+                            i++;
+                        }
+                    }
+                    else if (IsAscii(next))
+                    {
+                        response += Convert.ToChar(next);
+                        int i = 0;
+                        while (true)
+                        {
+                            result = sp.ReadTo("\r\n");
+                            if (i == 6)
+                            {
+                                result = sp.ReadTo("\r");
+                                break;
+                            }
+                            response += result;
+                            i++;
+                        }
+                    }
+                }
+                else
+                {
+                    if (cmd != "126")
+                    {
+                        sp.ReadTo("\n");
+                        sp.ReadTo("\r\n");
+                    }
+                    continue;
+                }
+                return (cmd, response, result);
+            }
+        }
+        private static (string Command, string Response, string Result) ExecuteATPercentR(SerialPort sp, string command)
+        {
+            var bytes = Encoding.ASCII.GetBytes(command + '\r');
+            sp.Write(bytes, 0, bytes.Length);
+            while (true)
+            {
+                var result = string.Empty;
+                var response = string.Empty;
+                var cmd = sp.ReadTo("\r");
+                if (cmd == command)
+                {
+                    var next = sp.ReadChar();
+                    if (IsCarriageReturn(next))
+                    {
+                        sp.ReadTo("\n");
+                        int i = 0;
+                        while (true)
+                        {
+                            result = sp.ReadTo("\r\n");
+                            if (i == 66)
+                            {
+                                break;
+                            }
+                            sp.ReadTo("\n");
+                            response += result;
+                            i++;
+                        }
+                    }
+                    else if (IsAscii(next))
+                    {
+                        response += Convert.ToChar(next);
+                        int i = 0;
+                        while (true)
+                        {
+                            result = sp.ReadTo("\r\n");
+                            if (i == 65)
+                            {
+                                result = sp.ReadTo("\r");
+                                break;
+                            }
+                            response += result;
+                            i++;
+                        }
+                    }
+                }
+                else
+                {
+                    if (cmd != "126")
+                    {
+                        sp.ReadTo("\n");
+                        sp.ReadTo("\r\n");
+                    }
+                    continue;
+                }
+                return (cmd, response, result);
+            }
+        }
+        private static (string Command, string Response, string Result) ExecuteResponseWithPayload(SerialPort sp, string command)
+        {
+            var bytes = Encoding.ASCII.GetBytes(command + '\r');
+            sp.Write(bytes, 0, bytes.Length);
+            while (true)
+            {
+                var result = string.Empty;
+                var response = string.Empty;
+                var cmd = sp.ReadTo("\r");
+                if (cmd == command)
+                {
+                    var next = sp.ReadChar();
+                    if (IsCarriageReturn(next))
+                    {
+                        sp.ReadTo("\n");
+                        response = sp.ReadTo("\r\n\r\n");
+                        result = sp.ReadTo("\r\n");
+                    }
+                    else if (IsAscii(next))
+                    {
+                        response += Convert.ToChar(next);
+                        response += sp.ReadTo("\r\n");
+                        result = sp.ReadTo("\r");
+                    }
+                }
+                else
+                {
+                    if (cmd != "126")
+                    {
+                        sp.ReadTo("\n");
+                        sp.ReadTo("\r\n");
+                    }
+                    continue;
+                }
+                return (cmd, response, result);
+            }
+        }
+        private static (string Command, string Response, string Result) ExecuteResponseWithoutPayload(SerialPort sp, string command)
+        {
+            var bytes = Encoding.ASCII.GetBytes(command + '\r');
+            sp.Write(bytes, 0, bytes.Length);
+            while (true)
+            {
+                var result = string.Empty;
+                var response = string.Empty;
+                var cmd = sp.ReadTo("\r");
+                if (cmd == command)
+                {
+                    var next = sp.ReadChar();
+                    if (IsCarriageReturn(next))
+                    {
+                        sp.ReadTo("\n");
+                        result = sp.ReadTo("\r\n");
+                    }
+                    else if (IsAscii(next))
+                    {
+                        result += Convert.ToChar(next);
+                        result += sp.ReadTo("\r");
+                    }
+                }
+                else
+                {
+                    if (cmd != "126")
+                    {
+                        sp.ReadTo("\n");
+                        sp.ReadTo("\r\n");
+                    }
+                    continue;
+                }
+                return (cmd, response, result);
+            }
         }       
+        private static byte[] CalculateChecksum(string payload)
+        {
+            var bytes = Encoding.ASCII.GetBytes(payload);
+            uint sum = 0;
+            for (int i = 0; i < bytes.Length; i++)
+            {
+                sum += bytes[i];
+            }
+            ushort cks = (ushort)(sum & 0xFFFF);
+            return new[] { (byte)(cks >> 8), (byte)(cks & 0xFF) };
+        }
+        private static bool IsAscii(int c) => (uint)c <= '\x007f';
+        private static bool IsLineFeed(int c) => (uint)c == '\x000a';
+        private static bool IsCarriageReturn(int c) => (uint)c == '\x000d';
+        #endregion
+
+        #region idisposable
+        private bool _isDisposed;
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!_isDisposed)
+            {
+                if (disposing)
+                {
+                    ConnectedSource.Dispose();
+                    FaultedSource.Dispose();
+                    SerialPort?.Dispose();
+                    SemaphoreSlim?.Dispose();
+                }
+                _isDisposed = true;
+            }
+        }
+        #endregion
     }
 }

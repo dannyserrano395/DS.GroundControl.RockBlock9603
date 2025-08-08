@@ -74,7 +74,7 @@ namespace DS.GroundControl.RockBlock9603.Setup
             {
                 case "--install":
                     {
-                        ExecuteInstallOption(serviceSettings, serviceSettingsPath);
+                        ExecuteInstallOption(serviceSettings, serviceExePath);
                         break;
                     }
                 case "--uninstall":
@@ -138,11 +138,11 @@ namespace DS.GroundControl.RockBlock9603.Setup
             var n2 = nodes.Cast<XmlNode>()
                 .Where(node =>
                 node.NodeType == XmlNodeType.Element &&
-                node.Attributes.GetNamedItem("key").Value == "Discription").FirstOrDefault();
+                node.Attributes.GetNamedItem("key").Value == "Description").FirstOrDefault();
 
             var serviceName = n0?.Attributes.GetNamedItem("value")?.Value ?? string.Empty;
-            var displayName = n0?.Attributes.GetNamedItem("value")?.Value ?? string.Empty;
-            var description = n0?.Attributes.GetNamedItem("value")?.Value ?? string.Empty;
+            var displayName = n1?.Attributes.GetNamedItem("value")?.Value ?? string.Empty;
+            var description = n2?.Attributes.GetNamedItem("value")?.Value ?? string.Empty;
 
             return (serviceName, displayName, description);
         }

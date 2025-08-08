@@ -1,10 +1,11 @@
-﻿using System.Text.Json;
+﻿using System.Text;
+using System.Text.Json;
 using System.Text.Encodings.Web;
 using DS.GroundControl.Lib.Devices;
 using DS.GroundControl.Lib.Extensions;
+using DS.GroundControl.Lib.Factories;
 using ILogger = DS.GroundControl.RockBlock9603.Service.Log4Net.ILogger;
 using IConfigurationManager = DS.GroundControl.RockBlock9603.Service.Configuration.IConfigurationManager;
-using DS.GroundControl.Lib.Factories;
 
 namespace DS.GroundControl.RockBlock9603.Service.Manager
 {
@@ -54,7 +55,7 @@ namespace DS.GroundControl.RockBlock9603.Service.Manager
         {
             _ = StartedSource.CancelAsync();
             await RockBlock9603StartAsync();
-            if (RockBlock9603.Running.IsCancellationRequested)
+            if (RockBlock9603.Connected.IsCancellationRequested)
             {
                 _ = RunningSource.CancelAsync();
                 await RockBlock9603RunningAsync();
@@ -63,7 +64,6 @@ namespace DS.GroundControl.RockBlock9603.Service.Manager
                     _ = FaultedSource.CancelAsync();
                 }
             }
-            await RockBlock9603StopAsync();
             _ = StoppedSource.CancelAsync();
         }
         public async Task StopAsync()
@@ -78,17 +78,18 @@ namespace DS.GroundControl.RockBlock9603.Service.Manager
             RunningSource.Dispose();
             StoppedSource.Dispose();
             FaultedSource.Dispose();
+            RockBlock9603?.Dispose();
         }       
         private async Task RockBlock9603StartAsync()
         {
             RockBlock9603 = RockBlock9603Factory.Create();
-            _ = RockBlock9603.StartAsync();
+            _ = RockBlock9603.ConnectAsync();
 
-            var running = new TaskCompletionSource();
-            var stopped = new TaskCompletionSource();
-            using var run = RockBlock9603.Running.Register(() => running.SetResult());
-            using var stp = RockBlock9603.Stopped.Register(() => stopped.SetResult());
-            await Task.WhenAny(running.Task, stopped.Task);
+            var connected = new TaskCompletionSource();
+            var faulted = new TaskCompletionSource();
+            using var connect = RockBlock9603.Connected.Register(() => connected.SetResult());
+            using var fault = RockBlock9603.Faulted.Register(() => faulted.SetResult());
+            await Task.WhenAny(connected.Task, faulted.Task);
         }
         private async Task RockBlock9603RunningAsync()
         {         
@@ -96,7 +97,7 @@ namespace DS.GroundControl.RockBlock9603.Service.Manager
             {
                 try
                 {
-                    var codes = await IridiumSessionAsync();
+                    var codes = await IridiumBinarySessionAsync();
                     if (codes != null)
                     {
                         var session = new
@@ -148,23 +149,19 @@ namespace DS.GroundControl.RockBlock9603.Service.Manager
                 i = await HandleIridiumSessionAsync(i);
             }
         }
-        private async Task RockBlock9603StopAsync()
-        {
-            await RockBlock9603.StopAsync();
-        }
-        private async Task<string[]> IridiumSessionAsync(string message = default)
+        private async Task<string[]> IridiumBinarySessionAsync(string message = default)
         {
             try
             {
                 string moMessage = null;
-                if (message is not null or "")
+                if (!string.IsNullOrEmpty(message))
                 {
-                    var sbdwb = await RockBlock9603.WriteWithCarriageReturnAsync($"AT+SBDWB={message.Length}");
+                    var sbdwb = await RockBlock9603.ExecuteAsync($"AT+SBDWB={message.Length}");
                     if (sbdwb is not { Response: "READY" })
                     {
                         return null;
                     }
-                    var sbdmsg = await RockBlock9603.WriteWithChecksumAsync(message);
+                    var sbdmsg = await RockBlock9603.ExecuteReadyStateBinaryCommandAsync(message);
                     if (sbdmsg is not { Response: "0", Result: "OK" or "0" })
                     {
                         return null;
@@ -172,7 +169,7 @@ namespace DS.GroundControl.RockBlock9603.Service.Manager
                     moMessage = message;
                 }
 
-                var sbdi = await RockBlock9603.WriteWithCarriageReturnAsync("AT+SBDI");
+                var sbdi = await RockBlock9603.ExecuteAsync("AT+SBDI");
                 if (sbdi is not { Result: "OK" or "0" })
                 {
                     return null;
@@ -183,18 +180,20 @@ namespace DS.GroundControl.RockBlock9603.Service.Manager
                 string mtMessage = null;
                 if (codes[2] == "1")
                 {
-                    var sbdrb = await RockBlock9603.WriteWithCarriageReturnAsync("AT+SBDRB");
+                    var sbdrb = await RockBlock9603.ExecuteAsync("AT+SBDRB");
                     if (sbdrb is not { Result: "OK" or "0" })
                     {
                         return null;
                     }
-                    var len = sbdrb.Response.Substring(0, 2);
-                    var msg = sbdrb.Response.Substring(2, sbdrb.Response.Length - 4);
-                    var cks = sbdrb.Response.Substring(sbdrb.Response.Length - 2);
+                    var bytes = Encoding.ASCII.GetBytes(sbdrb.Response);
+                    int len = (bytes[0] << 8) | bytes[1];
+                    var payload = bytes.Skip(2).Take(len).ToArray();
+                    var msg = Encoding.ASCII.GetString(payload);
+                    var cks = bytes.Skip(2 + len).Take(2).ToArray();
                     mtMessage = msg;
                 }
 
-                var sbdd = await RockBlock9603.WriteWithCarriageReturnAsync("AT+SBDD2");
+                var sbdd = await RockBlock9603.ExecuteAsync("AT+SBDD2");
                 if (sbdd is not { Result: "OK" or "0" })
                 {
                     return null;
@@ -220,9 +219,9 @@ namespace DS.GroundControl.RockBlock9603.Service.Manager
             try
             {
                 string moMessage = null;
-                if (message is not null or "")
+                if (!string.IsNullOrEmpty(message))
                 {
-                    var sbdwt = await RockBlock9603.WriteWithCarriageReturnAsync($"AT+SBDWT={message}");
+                    var sbdwt = await RockBlock9603.ExecuteAsync($"AT+SBDWT={message}");
                     if (sbdwt is not { Result: "OK" or "0" })
                     {
                         return null;
@@ -230,7 +229,7 @@ namespace DS.GroundControl.RockBlock9603.Service.Manager
                     moMessage = message;
                 }
 
-                var sbdi = await RockBlock9603.WriteWithCarriageReturnAsync("AT+SBDI");
+                var sbdi = await RockBlock9603.ExecuteAsync("AT+SBDI");
                 if (sbdi is not { Result: "OK" or "0" })
                 {
                     return null;
@@ -241,7 +240,7 @@ namespace DS.GroundControl.RockBlock9603.Service.Manager
                 string mtMessage = null;
                 if (codes[2] == "1")
                 {
-                    var sbdrt = await RockBlock9603.WriteWithCarriageReturnAsync("AT+SBDRT");
+                    var sbdrt = await RockBlock9603.ExecuteAsync("AT+SBDRT");
                     if (sbdrt is not { Result: "OK" or "0" })
                     {
                         return null;
@@ -249,7 +248,7 @@ namespace DS.GroundControl.RockBlock9603.Service.Manager
                     mtMessage = sbdrt.Response.RemoveSubstring("+SBDRT:");
                 }
 
-                var sbdd = await RockBlock9603.WriteWithCarriageReturnAsync("AT+SBDD2");
+                var sbdd = await RockBlock9603.ExecuteAsync("AT+SBDD2");
                 if (sbdd is not { Result: "OK" or "0" })
                 {
                     return null;
@@ -308,4 +307,8 @@ namespace DS.GroundControl.RockBlock9603.Service.Manager
 // upload and download
 // success  0 , 1
 // failed   (32 , 2) , (18 , 2)
+
+//var len = sbdrb.Response.Substring(0, 2);
+//var msg = sbdrb.Response.Substring(2, sbdrb.Response.Length - 4);
+//var cks = sbdrb.Response.Substring(sbdrb.Response.Length - 2);
 #endregion
