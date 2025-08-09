@@ -151,109 +151,100 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
             {
                 RockBlock9603 = RockBlock9603Factory.Create();
                 _ = RockBlock9603.ConnectAsync();
-
-                var connected = new TaskCompletionSource();
-                var faulted = new TaskCompletionSource();
-                using var connect = RockBlock9603.Connected.Register(() => connected.SetResult());
-                using var fault = RockBlock9603.Faulted.Register(() => faulted.SetResult());
-                await Task.WhenAny(connected.Task, faulted.Task);
+                await Task.WhenAny(RockBlock9603.Connected, RockBlock9603.Faulted);
             }
             return RockBlockStatus();
-        }       
+        }
         private async Task<string> ExecuteAsync(string command)
         {
-            if (RockBlock9603 == null || !RockBlock9603.Connected.IsCancellationRequested ||
-                RockBlock9603.Faulted.IsCancellationRequested)
+            if (RockBlock9603 != null && RockBlock9603.Connected.IsCompletedSuccessfully &&
+                !RockBlock9603.Disconnected.IsCompleted && !RockBlock9603.Faulted.IsCompleted)
             {
-                return RockBlockStatus();
-            }
-            try
-            {
-                var output = await RockBlock9603.ExecuteAsync(command);
-                return ToJsonString(new
+                try
                 {
-                    ISU = new
+                    var output = await RockBlock9603.ExecuteAsync(command);
+                    return ToJsonString(new
                     {
-                        output.Command,
-                        output.Response,
-                        output.Result
-                    }
-                });
+                        ISU = new
+                        {
+                            output.Command,
+                            output.Response,
+                            output.Result
+                        }
+                    });
+                }
+                catch { }
             }
-            catch { }
             return RockBlockStatus();
         }
         private async Task<string> ExecuteReadyStateTextCommandAsync(string command)
         {
-            if (RockBlock9603 == null || !RockBlock9603.Connected.IsCancellationRequested ||
-                RockBlock9603.Faulted.IsCancellationRequested)
+            if (RockBlock9603 != null && RockBlock9603.Connected.IsCompletedSuccessfully &&
+                !RockBlock9603.Disconnected.IsCompleted && !RockBlock9603.Faulted.IsCompleted)
             {
-                return RockBlockStatus();
-            }
-            try
-            {
-                var output = await RockBlock9603.ExecuteReadyStateTextCommandAsync(command);
-                return ToJsonString(new
+                try
                 {
-                    ISU = new
+                    var output = await RockBlock9603.ExecuteReadyStateTextCommandAsync(command);
+                    return ToJsonString(new
                     {
-                        output.Command,
-                        output.Response,
-                        output.Result
-                    }
-                });
+                        ISU = new
+                        {
+                            output.Command,
+                            output.Response,
+                            output.Result
+                        }
+                    });
+                }
+                catch { }
             }
-            catch { }
             return RockBlockStatus();
         }
         private async Task<string> ExecuteReadyStateBinaryCommandAsync(string command)
         {
-            if (RockBlock9603 == null || !RockBlock9603.Connected.IsCancellationRequested ||
-                RockBlock9603.Faulted.IsCancellationRequested)
+            if (RockBlock9603 != null && RockBlock9603.Connected.IsCompletedSuccessfully &&
+                !RockBlock9603.Disconnected.IsCompleted && !RockBlock9603.Faulted.IsCompleted)
             {
-                return RockBlockStatus();
-            }
-            try
-            {
-                var output = await RockBlock9603.ExecuteReadyStateBinaryCommandAsync(command);
-                return ToJsonString(new
+                try
                 {
-                    ISU = new
+                    var output = await RockBlock9603.ExecuteReadyStateBinaryCommandAsync(command);
+                    return ToJsonString(new
                     {
-                        output.Command,
-                        output.Response,
-                        output.Result
-                    }
-                });
+                        ISU = new
+                        {
+                            output.Command,
+                            output.Response,
+                            output.Result
+                        }
+                    });
+                }
+                catch { }
             }
-            catch { }
             return RockBlockStatus();
         }
         private async Task<string> RockBlockTimeAsync()
         {
-            if (RockBlock9603 == null || !RockBlock9603.Connected.IsCancellationRequested ||
-                RockBlock9603.Faulted.IsCancellationRequested)
+            if (RockBlock9603 != null && RockBlock9603.Connected.IsCompletedSuccessfully &&
+                !RockBlock9603.Disconnected.IsCompleted && !RockBlock9603.Faulted.IsCompleted)
             {
-                return RockBlockStatus();
-            }
-            try
-            {
-                var output = await RockBlock9603.ExecuteAsync("AT-MSSTM");
-
-                var hex = output.Response.Split("-MSSTM: ").Last();
-                var time = hex.All(char.IsAsciiHexDigit)
-                    ? CalculateIridiumTime(hex)
-                    : hex;
-
-                return ToJsonString(new
+                try
                 {
-                    ISU = new
+                    var output = await RockBlock9603.ExecuteAsync("AT-MSSTM");
+
+                    var hex = output.Response.Split("-MSSTM: ").Last();
+                    var time = hex.All(char.IsAsciiHexDigit)
+                        ? CalculateIridiumTime(hex)
+                        : hex;
+
+                    return ToJsonString(new
                     {
-                        Time = time
-                    }
-                });
+                        ISU = new
+                        {
+                            Time = time
+                        }
+                    });
+                }
+                catch { }
             }
-            catch { }
             return RockBlockStatus();
         }
         private string RockBlockStatus()
@@ -262,8 +253,9 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
             {
                 ISU = new
                 {
-                    Connected = RockBlock9603?.Connected.IsCancellationRequested,
-                    Faulted = RockBlock9603?.Faulted.IsCancellationRequested
+                    Connected = RockBlock9603?.Connected.IsCompletedSuccessfully,
+                    Disconnected = RockBlock9603?.Disconnected.IsCompletedSuccessfully,
+                    Faulted = RockBlock9603?.Faulted.IsCompletedSuccessfully
                 }
             });
         }
@@ -279,8 +271,9 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
             {
                 ISU = new
                 {
-                    Connected = rb?.Connected.IsCancellationRequested,
-                    Faulted = rb?.Faulted.IsCancellationRequested
+                    Connected = rb?.Connected.IsCompletedSuccessfully,
+                    Disconnected = rb?.Disconnected.IsCompletedSuccessfully,
+                    Faulted = rb?.Faulted.IsCompletedSuccessfully
                 }
             });
         }

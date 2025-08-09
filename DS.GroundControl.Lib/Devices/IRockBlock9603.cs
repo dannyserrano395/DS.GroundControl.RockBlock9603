@@ -2,8 +2,9 @@
 {
     public interface IRockBlock9603 : IDisposable
     {
-        CancellationToken Connected { get; }
-        CancellationToken Faulted { get; }
+        Task Connected { get; }
+        Task Disconnected { get; }
+        Task Faulted { get; }
         Task ConnectAsync();
         Task<(string Command, string Response, string Result)> ExecuteAsync(string command);
         Task<(string Command, string Response, string Result)> ExecuteReadyStateTextCommandAsync(string command);

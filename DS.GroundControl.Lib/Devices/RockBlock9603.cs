@@ -1,28 +1,34 @@
 ﻿using System.Text;
 using System.IO.Ports;
 using DS.GroundControl.Lib.Extensions;
+using DS.GroundControl.Lib.Exceptions;
 
 namespace DS.GroundControl.Lib.Devices
 {
     public class RockBlock9603 : IRockBlock9603
     {
         private SerialPort SerialPort { get; set; }
-        private SemaphoreSlim SemaphoreSlim { get; set; }
-        private CancellationTokenSource ConnectedSource { get; }
-        private CancellationTokenSource FaultedSource { get; }
-        public CancellationToken Connected { get; }
-        public CancellationToken Faulted { get; }
+        private SemaphoreSlim SemaphoreSlim { get; }
+        private TaskCompletionSource ConnectedSource { get; }
+        private TaskCompletionSource DisconnectedSource { get; }
+        private TaskCompletionSource FaultedSource { get; }
+        public Task Connected { get; }
+        public Task Disconnected { get; }
+        public Task Faulted { get; }
 
         public RockBlock9603()
         {
-            ConnectedSource = new CancellationTokenSource();
-            FaultedSource = new CancellationTokenSource();
-            Connected = ConnectedSource.Token;
-            Faulted = FaultedSource.Token;
+            SemaphoreSlim = new SemaphoreSlim(1, 1);
+            ConnectedSource = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            DisconnectedSource = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            FaultedSource = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            Connected = ConnectedSource.Task;
+            Disconnected = DisconnectedSource.Task;
+            Faulted = FaultedSource.Task;
         }
 
         public async Task ConnectAsync()
-        {          
+        {
             foreach (var name in SerialPort.GetPortNames())
             {
                 var sp = new SerialPort();
@@ -37,87 +43,110 @@ namespace DS.GroundControl.Lib.Devices
                     if (await TryValidateConnectionAsync(sp))
                     {
                         SerialPort = sp;
-                        SemaphoreSlim = new SemaphoreSlim(1, 1);
-                        _ = ConnectedSource.CancelAsync();
-                        return;
+                        if (ConnectedSource.TrySetResult())
+                        {
+                            return;
+                        }
+                        SerialPort = null;
+                        sp.Dispose();
+                        break;
                     }
                 }
                 catch { }
                 sp.Dispose();
             }
-            _ = FaultedSource.CancelAsync();
+            FaultedSource.TrySetResult();
+            if (Connected.IsCompletedSuccessfully)
+            {
+                DisconnectedSource.TrySetResult();
+            }
         }
         public async Task<(string Command, string Response, string Result)> ExecuteAsync(string command)
         {
             try
             {
-                await SemaphoreSlim.WaitAsync();
-                try
+                if (Connected.IsCompletedSuccessfully && !Disconnected.IsCompleted && !Faulted.IsCompleted)
                 {
-                    return await ExecuteAsync(SerialPort, command);
-                }
-                finally
-                {
-                    SemaphoreSlim.Release();
+                    await SemaphoreSlim.WaitAsync();
+                    try
+                    {
+                        return await ExecuteAsync(SerialPort, command);
+                    }
+                    catch
+                    {
+                        if (FaultedSource.TrySetResult())
+                        {
+                            DisconnectedSource.TrySetResult();
+                            SerialPort.Dispose();
+                            SerialPort = null;
+                        }
+                    }
+                    finally
+                    {
+                        SemaphoreSlim.Release();
+                    }
                 }
             }
-            catch
-            {
-                if (Connected.IsCancellationRequested)
-                {
-                    _ = FaultedSource.CancelAsync();
-                    SerialPort.Dispose();
-                }
-                throw;
-            }
+            catch { }
+            throw new DeviceNotConnectedException();
         }
         public async Task<(string Command, string Response, string Result)> ExecuteReadyStateTextCommandAsync(string command)
         {
             try
             {
-                await SemaphoreSlim.WaitAsync();
-                try
+                if (Connected.IsCompletedSuccessfully && !Disconnected.IsCompleted && !Faulted.IsCompleted)
                 {
-                    return await ExecuteReadyStateTextCommandAsync(SerialPort, command);
-                }
-                finally
-                {
-                    SemaphoreSlim.Release();
+                    await SemaphoreSlim.WaitAsync();
+                    try
+                    {
+                        return await ExecuteReadyStateTextCommandAsync(SerialPort, command);
+                    }
+                    catch
+                    {
+                        if (FaultedSource.TrySetResult())
+                        {
+                            DisconnectedSource.TrySetResult();
+                            SerialPort.Dispose();
+                            SerialPort = null;
+                        }
+                    }
+                    finally
+                    {
+                        SemaphoreSlim.Release();
+                    }
                 }
             }
-            catch
-            {
-                if (Connected.IsCancellationRequested)
-                {
-                    _ = FaultedSource.CancelAsync();
-                    SerialPort.Dispose();
-                }
-                throw;
-            }
+            catch { }
+            throw new DeviceNotConnectedException();
         }
         public async Task<(string Command, string Response, string Result)> ExecuteReadyStateBinaryCommandAsync(string command)
         {
             try
             {
-                await SemaphoreSlim.WaitAsync();
-                try
+                if (Connected.IsCompletedSuccessfully && !Disconnected.IsCompleted && !Faulted.IsCompleted)
                 {
-                    return await ExecuteReadyStateBinaryCommandAsync(SerialPort, command);
-                }
-                finally
-                {
-                    SemaphoreSlim.Release();
+                    await SemaphoreSlim.WaitAsync();
+                    try
+                    {
+                        return await ExecuteReadyStateBinaryCommandAsync(SerialPort, command);
+                    }
+                    catch
+                    {
+                        if (FaultedSource.TrySetResult())
+                        {
+                            DisconnectedSource.TrySetResult();
+                            SerialPort.Dispose();
+                            SerialPort = null;
+                        }
+                    }
+                    finally
+                    {
+                        SemaphoreSlim.Release();
+                    }
                 }
             }
-            catch
-            {
-                if (Connected.IsCancellationRequested)
-                {
-                    _ = FaultedSource.CancelAsync();
-                    SerialPort.Dispose();
-                }
-                throw;
-            }
+            catch { }
+            throw new DeviceNotConnectedException();
         }
 
         #region static
@@ -813,10 +842,27 @@ namespace DS.GroundControl.Lib.Devices
             {
                 if (disposing)
                 {
-                    ConnectedSource.Dispose();
-                    FaultedSource.Dispose();
                     SerialPort?.Dispose();
                     SemaphoreSlim?.Dispose();
+                    if (!Connected.IsCompleted)
+                    {
+                        ConnectedSource.TrySetCanceled();
+                    }
+                    if (!Disconnected.IsCompleted)
+                    {
+                        if (Connected.IsCompleted)
+                        {
+                            DisconnectedSource.TrySetResult();
+                        }
+                        else
+                        {
+                            DisconnectedSource.TrySetCanceled();
+                        }
+                    }
+                    if (!Faulted.IsCompleted)
+                    {
+                        FaultedSource.TrySetCanceled();
+                    }
                 }
                 _isDisposed = true;
             }
