@@ -1,7 +1,6 @@
 ﻿using System.Text;
 using System.IO.Ports;
 using DS.GroundControl.Lib.Extensions;
-using DS.GroundControl.Lib.Exceptions;
 
 namespace DS.GroundControl.Lib.Devices
 {
@@ -29,124 +28,103 @@ namespace DS.GroundControl.Lib.Devices
 
         public async Task ConnectAsync()
         {
-            foreach (var name in SerialPort.GetPortNames())
+            await SemaphoreSlim.WaitAsync();
+            try
             {
-                var sp = new SerialPort();
-                try
+                SerialPort = await TryLocateAndConnectAsync();
+                if (SerialPort != null && TryTransitionToConnected())
                 {
-                    sp.PortName = name;
-                    sp.BaudRate = 19200;
-                    sp.DataBits = 8;
-                    sp.Parity = Parity.None;
-                    sp.StopBits = StopBits.One;
-                    sp.Open();
-                    if (await TryValidateConnectionAsync(sp))
-                    {
-                        SerialPort = sp;
-                        if (ConnectedSource.TrySetResult())
-                        {
-                            return;
-                        }
-                        SerialPort = null;
-                        sp.Dispose();
-                        break;
-                    }
+                    return;
                 }
-                catch { }
-                sp.Dispose();
+                TryTransitionToFaulted();
+                SerialPort?.Dispose();
+                SerialPort = null;
             }
-            FaultedSource.TrySetResult();
-            if (Connected.IsCompletedSuccessfully)
+            finally
             {
-                DisconnectedSource.TrySetResult();
+                SemaphoreSlim.Release();
             }
         }
         public async Task<(string Command, string Response, string Result)> ExecuteAsync(string command)
         {
+            await SemaphoreSlim.WaitAsync();
             try
             {
-                if (Connected.IsCompletedSuccessfully && !Disconnected.IsCompleted && !Faulted.IsCompleted)
-                {
-                    await SemaphoreSlim.WaitAsync();
-                    try
-                    {
-                        return await ExecuteAsync(SerialPort, command);
-                    }
-                    catch
-                    {
-                        if (FaultedSource.TrySetResult())
-                        {
-                            DisconnectedSource.TrySetResult();
-                            SerialPort.Dispose();
-                            SerialPort = null;
-                        }
-                    }
-                    finally
-                    {
-                        SemaphoreSlim.Release();
-                    }
-                }
+                return await ExecuteAsync(SerialPort, command);
             }
-            catch { }
-            throw new DeviceNotConnectedException();
+            catch
+            {
+                TryTransitionToFaulted();
+                SerialPort?.Dispose();
+                SerialPort = null;
+                throw;
+            }
+            finally
+            {
+                SemaphoreSlim.Release();
+            }
         }
         public async Task<(string Command, string Response, string Result)> ExecuteReadyStateTextCommandAsync(string command)
         {
+            await SemaphoreSlim.WaitAsync();
             try
             {
-                if (Connected.IsCompletedSuccessfully && !Disconnected.IsCompleted && !Faulted.IsCompleted)
-                {
-                    await SemaphoreSlim.WaitAsync();
-                    try
-                    {
-                        return await ExecuteReadyStateTextCommandAsync(SerialPort, command);
-                    }
-                    catch
-                    {
-                        if (FaultedSource.TrySetResult())
-                        {
-                            DisconnectedSource.TrySetResult();
-                            SerialPort.Dispose();
-                            SerialPort = null;
-                        }
-                    }
-                    finally
-                    {
-                        SemaphoreSlim.Release();
-                    }
-                }
+                return await ExecuteReadyStateTextCommandAsync(SerialPort, command);
             }
-            catch { }
-            throw new DeviceNotConnectedException();
+            catch
+            {
+                TryTransitionToFaulted();
+                SerialPort?.Dispose();
+                SerialPort = null;
+                throw;
+            }
+            finally
+            {
+                SemaphoreSlim.Release();
+            }
         }
         public async Task<(string Command, string Response, string Result)> ExecuteReadyStateBinaryCommandAsync(string command)
         {
+            await SemaphoreSlim.WaitAsync();
             try
             {
-                if (Connected.IsCompletedSuccessfully && !Disconnected.IsCompleted && !Faulted.IsCompleted)
-                {
-                    await SemaphoreSlim.WaitAsync();
-                    try
-                    {
-                        return await ExecuteReadyStateBinaryCommandAsync(SerialPort, command);
-                    }
-                    catch
-                    {
-                        if (FaultedSource.TrySetResult())
-                        {
-                            DisconnectedSource.TrySetResult();
-                            SerialPort.Dispose();
-                            SerialPort = null;
-                        }
-                    }
-                    finally
-                    {
-                        SemaphoreSlim.Release();
-                    }
-                }
+                return await ExecuteReadyStateBinaryCommandAsync(SerialPort, command);
             }
-            catch { }
-            throw new DeviceNotConnectedException();
+            catch
+            {
+                TryTransitionToFaulted();
+                SerialPort?.Dispose();
+                SerialPort = null;
+                throw;
+            }
+            finally
+            {
+                SemaphoreSlim.Release();
+            }
+        }
+        private bool TryTransitionToConnected()
+        {
+            if (!Faulted.IsCompleted)
+            {
+                return ConnectedSource.TrySetResult();
+            }
+            return false;
+        }
+        private bool TryTransitionToFaulted()
+        {
+            if (FaultedSource.TrySetResult())
+            {
+                if (Connected.IsCompletedSuccessfully)
+                {
+                    TryTransitionToDisconnected();
+                }
+                return true;
+            }
+            return false;
+        }
+        private bool TryTransitionToDisconnected()
+        {
+            return DisconnectedSource.TrySetResult();
         }
 
         #region static
@@ -208,8 +186,8 @@ namespace DS.GroundControl.Lib.Devices
                 { "ATI4", ExecuteResponseWithPayload },
                 { "ATI5", ExecuteResponseWithPayload },
                 { "ATI6", ExecuteResponseWithPayload },
-                { "AT+SBDWT=", ExecuteResponseWithoutPayload },
-                { "ATI7", ExecuteResponseWithoutPayload },
+                { "ATI7", ExecuteResponseWithPayload },
+                { "AT+SBDWT=", ExecuteResponseWithoutPayload },                
                 { "AT&Y0", ExecuteResponseWithoutPayload },
                 { "AT&K0", ExecuteResponseWithoutPayload },
                 { "AT&K3", ExecuteResponseWithoutPayload },
@@ -224,6 +202,33 @@ namespace DS.GroundControl.Lib.Devices
                 { "ATV0", ExecuteResponseWithoutPayload }
             };
 
+        public static async Task<SerialPort> TryLocateAndConnectAsync()
+        {
+            try
+            {
+                foreach (var name in SerialPort.GetPortNames())
+                {
+                    var sp = new SerialPort();
+                    try
+                    {
+                        sp.PortName = name;
+                        sp.BaudRate = 19200;
+                        sp.DataBits = 8;
+                        sp.Parity = Parity.None;
+                        sp.StopBits = StopBits.One;
+                        sp.Open();
+                        if (await TryValidateConnectionAsync(sp))
+                        {
+                            return sp;
+                        }
+                    }
+                    catch { }
+                    sp.Dispose();
+                }
+            }
+            catch { }
+            return null;
+        }
         private static async Task<bool> TryValidateConnectionAsync(SerialPort sp)
         {
             try
@@ -842,27 +847,47 @@ namespace DS.GroundControl.Lib.Devices
             {
                 if (disposing)
                 {
-                    SerialPort?.Dispose();
-                    SemaphoreSlim?.Dispose();
-                    if (!Connected.IsCompleted)
+                    try
                     {
-                        ConnectedSource.TrySetCanceled();
-                    }
-                    if (!Disconnected.IsCompleted)
-                    {
-                        if (Connected.IsCompleted)
+                        if (SemaphoreSlim.Wait(0))
                         {
-                            DisconnectedSource.TrySetResult();
+                            try
+                            {
+                                if (!Connected.IsCompleted)
+                                {
+                                    ConnectedSource.TrySetCanceled();
+                                }
+                                if (!Disconnected.IsCompleted)
+                                {
+                                    if (Connected.IsCompletedSuccessfully)
+                                    {
+                                        TryTransitionToDisconnected();
+                                    }
+                                    else
+                                    {
+                                        DisconnectedSource.TrySetCanceled();
+                                    }
+                                }
+                                if (!Faulted.IsCompleted)
+                                {
+                                    FaultedSource.TrySetCanceled();
+                                }
+                            }
+                            finally
+                            {
+                                SemaphoreSlim.Release();
+                            }
                         }
                         else
                         {
-                            DisconnectedSource.TrySetCanceled();
+                            if (!Connected.IsCompleted) ConnectedSource.TrySetCanceled();
+                            if (!Disconnected.IsCompleted) DisconnectedSource.TrySetCanceled();
+                            if (!Faulted.IsCompleted) FaultedSource.TrySetCanceled();
                         }
                     }
-                    if (!Faulted.IsCompleted)
-                    {
-                        FaultedSource.TrySetCanceled();
-                    }
+                    catch { }
+                    SerialPort?.Dispose();
+                    SemaphoreSlim.Dispose();
                 }
                 _isDisposed = true;
             }

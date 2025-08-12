@@ -3,93 +3,56 @@ using System.Text.Json;
 using System.Text.Encodings.Web;
 using DS.GroundControl.Lib.Devices;
 using DS.GroundControl.Lib.Extensions;
-using DS.GroundControl.Lib.Factories;
 using ILogger = DS.GroundControl.RockBlock9603.Service.Log4Net.ILogger;
 using IConfigurationManager = DS.GroundControl.RockBlock9603.Service.Configuration.IConfigurationManager;
 
 namespace DS.GroundControl.RockBlock9603.Service.Manager
 {
-    public class RockBlock9603Process : IRockBlock9603Process
+    public class RockBlock9603Session : IRockBlock9603Session
     {
         private ILogger Log { get; }
         private IConfigurationManager ConfigurationManager { get; }
-        private IRockBlock9603Factory RockBlock9603Factory { get; }
         private IRockBlock9603 RockBlock9603 { get; set; }
         private JsonSerializerOptions JsonSerializerOptions { get; }
-        private CancellationTokenSource CanceledSource { get; }
-        private CancellationTokenSource StartedSource { get; }
-        private CancellationTokenSource RunningSource { get; }
-        private CancellationTokenSource StoppedSource { get; }
-        private CancellationTokenSource FaultedSource { get; }
-        public CancellationToken Canceled { get; }
-        public CancellationToken Started { get; }
-        public CancellationToken Running { get; }
-        public CancellationToken Stopped { get; }
-        public CancellationToken Faulted { get; }
+        private TaskCompletionSource ConnectedSource { get; }
+        private TaskCompletionSource DisconnectedSource { get; }
+        private TaskCompletionSource FaultedSource { get; }
+        public Task Connected { get; }
+        public Task Disconnected { get; }
+        public Task Faulted { get; }
 
-        public RockBlock9603Process(
+        public RockBlock9603Session(
             ILogger log,
-            IConfigurationManager configurationManager,
-            IRockBlock9603Factory rockBlock9603Factory)
+            IConfigurationManager configurationManager)
         {
             Log = log;
             ConfigurationManager = configurationManager;
-            RockBlock9603Factory = rockBlock9603Factory;
             JsonSerializerOptions = new JsonSerializerOptions()
             {
                 Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
             };
-            CanceledSource = new CancellationTokenSource();
-            StartedSource = new CancellationTokenSource();
-            RunningSource = new CancellationTokenSource();
-            StoppedSource = new CancellationTokenSource();
-            FaultedSource = new CancellationTokenSource();
-            Canceled = CanceledSource.Token;
-            Started = StartedSource.Token;
-            Running = RunningSource.Token;
-            Stopped = StoppedSource.Token;
-            Faulted = FaultedSource.Token;
+            ConnectedSource = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            DisconnectedSource = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            FaultedSource = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            Connected = ConnectedSource.Task;
+            Disconnected = DisconnectedSource.Task;
+            Faulted = FaultedSource.Task;
         }
 
         public async Task StartAsync()
         {
-            _ = StartedSource.CancelAsync();
-            await RockBlock9603StartAsync();
-            if (RockBlock9603.Connected.IsCancellationRequested)
+            await RockBlock9603.ConnectAsync();
+            if (RockBlock9603.Connected.IsCompletedSuccessfully)
             {
-                _ = RunningSource.CancelAsync();
-                await RockBlock9603RunningAsync();
-                if (RockBlock9603.Faulted.IsCancellationRequested)
+                if (ConnectedSource.TrySetResult())
                 {
-                    _ = FaultedSource.CancelAsync();
+                    await RockBlock9603RunningAsync();
                 }
             }
-            _ = StoppedSource.CancelAsync();
-        }
-        public async Task StopAsync()
-        {
-            _ = CanceledSource.CancelAsync();          
-            if (Started.IsCancellationRequested)
+            else if (RockBlock9603.Faulted.IsCompletedSuccessfully)
             {
-                await Stopped.WhenCanceledAsync();
-            }          
-            CanceledSource.Dispose();
-            StartedSource.Dispose();
-            RunningSource.Dispose();
-            StoppedSource.Dispose();
-            FaultedSource.Dispose();
-            RockBlock9603?.Dispose();
-        }       
-        private async Task RockBlock9603StartAsync()
-        {
-            RockBlock9603 = RockBlock9603Factory.Create();
-            _ = RockBlock9603.ConnectAsync();
-
-            var connected = new TaskCompletionSource();
-            var faulted = new TaskCompletionSource();
-            using var connect = RockBlock9603.Connected.Register(() => connected.SetResult());
-            using var fault = RockBlock9603.Faulted.Register(() => faulted.SetResult());
-            await Task.WhenAny(connected.Task, faulted.Task);
+                FaultedSource.TrySetResult();
+            }
         }
         private async Task RockBlock9603RunningAsync()
         {         
@@ -115,24 +78,24 @@ namespace DS.GroundControl.RockBlock9603.Service.Manager
                         {
                             case { MobileOriginatedStatus: "0", MobileTerminatedStatus: "0", MobileTerminatedQueued: "0" }:
                                 {
-                                    await Task.Delay(TimeSpan.FromMinutes(ConfigurationManager.WorkerConfiguration.IridiumSessionFreqMin), Canceled);
+                                    await Task.Delay(TimeSpan.FromMinutes(ConfigurationManager.WorkerConfiguration.IridiumSessionFreqMin));
                                     return 0;
                                 }
                             case { MobileOriginatedStatus: "1" } or { MobileTerminatedStatus: "1" }:
                                 {
-                                    await Task.Delay(TimeSpan.FromSeconds(10), Canceled);
+                                    await Task.Delay(TimeSpan.FromSeconds(10));
                                     return 0;
                                 }
                             default:
                                 {
                                     if (i < 3)
                                     {
-                                        await Task.Delay(TimeSpan.FromMinutes(ConfigurationManager.WorkerConfiguration.IridiumSessionFreqMin), Canceled);
+                                        await Task.Delay(TimeSpan.FromMinutes(ConfigurationManager.WorkerConfiguration.IridiumSessionFreqMin));
                                         return i + 1;
                                     }
                                     else
                                     {
-                                        await Task.Delay(TimeSpan.FromMinutes(ConfigurationManager.WorkerConfiguration.IridiumSessionFreqMin), Canceled);
+                                        await Task.Delay(TimeSpan.FromMinutes(ConfigurationManager.WorkerConfiguration.IridiumSessionFreqMin));
                                         return 0;
                                     }
                                 }
@@ -270,6 +233,45 @@ namespace DS.GroundControl.RockBlock9603.Service.Manager
             return null;
         }       
         private string ToJsonString<T>(T value) => JsonSerializer.Serialize(value, JsonSerializerOptions);
+
+        #region idisposable
+        private bool _isDisposed;
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!_isDisposed)
+            {
+                if (disposing)
+                {
+                    RockBlock9603.Dispose();
+                    if (!Connected.IsCompleted)
+                    {
+                        ConnectedSource.TrySetCanceled();
+                    }
+                    if (!Disconnected.IsCompleted)
+                    {
+                        if (Connected.IsCompletedSuccessfully)
+                        {
+                            DisconnectedSource.TrySetResult();
+                        }
+                        else
+                        {
+                            DisconnectedSource.TrySetCanceled();
+                        }
+                    }
+                    if (!Faulted.IsCompleted)
+                    {
+                        FaultedSource.TrySetCanceled();
+                    }
+                }
+                _isDisposed = true;
+            }
+        }
+        #endregion
     }
 }
 

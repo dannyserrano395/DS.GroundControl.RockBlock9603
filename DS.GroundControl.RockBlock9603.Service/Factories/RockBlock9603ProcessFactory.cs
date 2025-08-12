@@ -8,6 +8,6 @@ namespace DS.GroundControl.RockBlock9603.Service.Factories
 
         public RockBlock9603ProcessFactory(IServiceProvider serviceProvider) => ServiceProvider = serviceProvider;
 
-        public IRockBlock9603Process Create() => ActivatorUtilities.CreateInstance<RockBlock9603Process>(ServiceProvider);
+        public IRockBlock9603Session Create() => ActivatorUtilities.CreateInstance<RockBlock9603Session>(ServiceProvider);
     }
 }

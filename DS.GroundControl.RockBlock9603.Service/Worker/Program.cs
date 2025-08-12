@@ -35,7 +35,7 @@ namespace DS.GroundControl.RockBlock9603.Service.Worker
                 .AddSingleton<IConfigurationManager, ConfigurationManager>()
                 .AddSingleton<IRockBlock9603Factory, RockBlock9603Factory>()
                 .AddSingleton<IRockBlock9603ProcessFactory, RockBlock9603ProcessFactory>()             
-                .AddSingleton<IRockBlock9603ProcessManager, RockBlock9603ProcessManager>()
+                .AddSingleton<IRockBlock9603SessionManager, RockBlock9603SessionManager>()
                 .AddHostedService<BackgroundWorker>();
             })
             .ConfigureHostOptions(options =>

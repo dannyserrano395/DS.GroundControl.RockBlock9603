@@ -13,7 +13,7 @@ namespace DS.GroundControl.Lib.Tests
             RockBlock9603 = new RockBlock9603();
             _ = RockBlock9603.ConnectAsync();
 
-            var connected = RockBlock9603.Connected.WhenCanceledAsync();
+            var connected = RockBlock9603.Connected;
             if (connected.TimeoutAfter(TimeSpan.FromSeconds(10)))
             {
                 Assert.Fail();

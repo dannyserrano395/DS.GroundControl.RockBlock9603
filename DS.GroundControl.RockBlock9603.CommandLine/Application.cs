@@ -150,8 +150,7 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
             if (RockBlock9603 == null)
             {
                 RockBlock9603 = RockBlock9603Factory.Create();
-                _ = RockBlock9603.ConnectAsync();
-                await Task.WhenAny(RockBlock9603.Connected, RockBlock9603.Faulted);
+                await RockBlock9603.ConnectAsync();
             }
             return RockBlockStatus();
         }
