@@ -14,8 +14,8 @@ namespace DS.GroundControl.Lib.Tests
         [TestCase("\rOK\r\n", "\n", "\rOK\r")]
         public async Task ReadToAsync_Returns_Text_Before_Delimiter(string str, string value, string expected)
         {
-            using var s = MakeStream(str);
-            var result = await s.ReadToAsync(value);
+            using var stream = MakeStream(str);
+            var result = await stream.ReadToAsync(value);
             Assert.That(result, Is.EqualTo(expected));
         }
         [Test]
@@ -56,15 +56,15 @@ namespace DS.GroundControl.Lib.Tests
         [Test]
         public async Task ReadByteAsync_ShouldReturnByteValue_WhenStreamContainsData()
         {
-            using var s = MakeStream("a");
-            var result = await s.ReadByteAsync();
+            using var stream = MakeStream("a");
+            var result = await stream.ReadByteAsync();
             Assert.That(result, Is.EqualTo(97));
         }
         [Test]
         public async Task ReadByteAsync_ShouldReturnMinusOne_WhenStreamHasNoData()
         {
-            using var s = MakeStream("");
-            var result = await s.ReadByteAsync();
+            using var stream = MakeStream("");
+            var result = await stream.ReadByteAsync();
             Assert.That(result, Is.EqualTo(-1));
         }
     }

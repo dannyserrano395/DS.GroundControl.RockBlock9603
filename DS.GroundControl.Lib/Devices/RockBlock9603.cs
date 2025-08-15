@@ -281,7 +281,7 @@ namespace DS.GroundControl.Lib.Devices
         }
         private static async Task<(string Command, string Response, string Result)> ExecuteReadyStateTextCommandAsync(Stream stream, string command)
         {
-            using var source = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+            using var source = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
             var bytes = Encoding.ASCII.GetBytes(command + '\r');
             await stream.WriteAsync(bytes, 0, bytes.Length, source.Token);
@@ -289,7 +289,6 @@ namespace DS.GroundControl.Lib.Devices
             var cmd = await stream.ReadToAsync("\r", source.Token);
             if (command.Length == cmd.Length) // ATV1 + AT+SBDWT + message
             {
-                cmd = cmd.Substring(0, cmd.Length - 1);
                 await stream.ReadToAsync("\n", source.Token);
                 var response = await stream.ReadToAsync("\r\n", source.Token);
                 await stream.ReadToAsync("\r\n", source.Token);
@@ -298,7 +297,7 @@ namespace DS.GroundControl.Lib.Devices
             }
             else // ATV0 + AT+SBDWT + message 
             {
-                var response = cmd[cmd.Length - 1].ToString();
+                var response = cmd[^1].ToString();
                 cmd = cmd.Substring(0, cmd.Length - 1);
                 await stream.ReadToAsync("\n", source.Token);
                 var result = await stream.ReadToAsync("\r", source.Token);
@@ -307,7 +306,7 @@ namespace DS.GroundControl.Lib.Devices
         }
         private static async Task<(string Command, string Response, string Result)> ExecuteReadyStateBinaryCommandAsync(Stream stream, string command)
         {
-            using var source = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+            using var source = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
             var cks = CalculateChecksum(command);
             var bytes = Encoding.ASCII.GetBytes(command).Concat(cks).ToArray();
@@ -332,7 +331,7 @@ namespace DS.GroundControl.Lib.Devices
         }
         private static async Task<(string Command, string Response, string Result)> ExecuteCCLKCurrentSettingsAsync(Stream stream, string command)
         {
-            using var source = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+            using var source = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
             var bytes = Encoding.ASCII.GetBytes(command + '\r');
             await stream.WriteAsync(bytes, 0, bytes.Length, source.Token);
@@ -373,7 +372,7 @@ namespace DS.GroundControl.Lib.Devices
         }
         private static async Task<(string Command, string Response, string Result)> ExecuteSBDRBAsync(Stream stream, string command)
         {
-            using var source = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+            using var source = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
             var bytes = Encoding.ASCII.GetBytes(command + '\r');
             await stream.WriteAsync(bytes, 0, bytes.Length, source.Token);
@@ -420,7 +419,7 @@ namespace DS.GroundControl.Lib.Devices
         }
         private static async Task<(string Command, string Response, string Result)> ExecuteSBDRTAsync(Stream stream, string command)
         {
-            using var source = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+            using var source = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
             var bytes = Encoding.ASCII.GetBytes(command + '\r');
             await stream.WriteAsync(bytes, 0, bytes.Length, source.Token);
@@ -463,7 +462,7 @@ namespace DS.GroundControl.Lib.Devices
         }
         private static async Task<(string Command, string Response, string Result)> ExecuteSBDWTAsync(Stream stream, string command)
         {
-            using var source = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+            using var source = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
             var bytes = Encoding.ASCII.GetBytes(command + '\r');
             await stream.WriteAsync(bytes, 0, bytes.Length, source.Token);
@@ -501,7 +500,7 @@ namespace DS.GroundControl.Lib.Devices
         }
         private static async Task<(string Command, string Response, string Result)> ExecuteSBDWBAsync(Stream stream, string command)
         {
-            using var source = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+            using var source = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
             var bytes = Encoding.ASCII.GetBytes(command + '\r');
             await stream.WriteAsync(bytes, 0, bytes.Length, source.Token);
@@ -539,7 +538,7 @@ namespace DS.GroundControl.Lib.Devices
         }
         private static async Task<(string Command, string Response, string Result)> ExecuteATAndVAsync(Stream stream, string command)
         {
-            using var source = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+            using var source = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
             var bytes = Encoding.ASCII.GetBytes(command + '\r');
             await stream.WriteAsync(bytes, 0, bytes.Length, source.Token);
@@ -599,7 +598,7 @@ namespace DS.GroundControl.Lib.Devices
         }
         private static async Task<(string Command, string Response, string Result)> ExecuteGMRAsync(Stream stream, string command)
         {
-            using var source = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+            using var source = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
             var bytes = Encoding.ASCII.GetBytes(command + '\r');
             await stream.WriteAsync(bytes, 0, bytes.Length, source.Token);
@@ -659,7 +658,7 @@ namespace DS.GroundControl.Lib.Devices
         }
         private static async Task<(string Command, string Response, string Result)> ExecuteCGMRAsync(Stream stream, string command)
         {
-            using var source = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+            using var source = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
             var bytes = Encoding.ASCII.GetBytes(command + '\r');
             await stream.WriteAsync(bytes, 0, bytes.Length, source.Token);
@@ -719,7 +718,7 @@ namespace DS.GroundControl.Lib.Devices
         }
         private static async Task<(string Command, string Response, string Result)> ExecuteATPercentRAsync(Stream stream, string command)
         {
-            using var source = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+            using var source = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
             var bytes = Encoding.ASCII.GetBytes(command + '\r');
             await stream.WriteAsync(bytes, 0, bytes.Length, source.Token);
@@ -779,7 +778,7 @@ namespace DS.GroundControl.Lib.Devices
         }
         private static async Task<(string Command, string Response, string Result)> ExecuteResponseWithPayloadAsync(Stream stream, string command)
         {
-            using var source = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+            using var source = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
             var bytes = Encoding.ASCII.GetBytes(command + '\r');
             await stream.WriteAsync(bytes, 0, bytes.Length, source.Token);
@@ -819,7 +818,7 @@ namespace DS.GroundControl.Lib.Devices
         }
         private static async Task<(string Command, string Response, string Result)> ExecuteResponseWithoutPayloadAsync(Stream stream, string command)
         {
-            using var source = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+            using var source = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
             var bytes = Encoding.ASCII.GetBytes(command + '\r');
             await stream.WriteAsync(bytes, 0, bytes.Length, source.Token);
