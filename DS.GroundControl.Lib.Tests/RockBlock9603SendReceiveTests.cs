@@ -1,5 +1,4 @@
 using DS.GroundControl.Lib.Devices;
-using DS.GroundControl.Lib.Extensions;
 
 namespace DS.GroundControl.Lib.Tests
 {
@@ -8,16 +7,11 @@ namespace DS.GroundControl.Lib.Tests
         private RockBlock9603 RockBlock9603;
 
         [OneTimeSetUp]
-        public void Setup()
+        public async Task Setup()
         {
             RockBlock9603 = new RockBlock9603();
             _ = RockBlock9603.ConnectAsync();
-
-            var connected = RockBlock9603.Connected;
-            if (connected.TimeoutAfter(TimeSpan.FromSeconds(10)))
-            {
-                Assert.Fail();
-            }
+            await RockBlock9603.Connected;
         }
 
         [OneTimeTearDown]

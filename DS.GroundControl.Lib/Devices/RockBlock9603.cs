@@ -31,10 +31,13 @@ namespace DS.GroundControl.Lib.Devices
             await SemaphoreSlim.WaitAsync();
             try
             {
-                SerialPort = await TryLocateAndConnectAsync();
-                if (SerialPort != null && TryTransitionToConnected())
+                if (EnsureCanConnect())
                 {
-                    return;
+                    SerialPort = await TryLocateAndConnectAsync();
+                    if (SerialPort != null && TryTransitionToConnected())
+                    {
+                        return;
+                    }
                 }
                 TryTransitionToFaulted();
                 SerialPort?.Dispose();
@@ -50,7 +53,7 @@ namespace DS.GroundControl.Lib.Devices
             await SemaphoreSlim.WaitAsync();
             try
             {
-                return await ExecuteAsync(SerialPort, command);
+                return await ExecuteAsync(SerialPort.BaseStream, command);
             }
             catch
             {
@@ -69,7 +72,7 @@ namespace DS.GroundControl.Lib.Devices
             await SemaphoreSlim.WaitAsync();
             try
             {
-                return await ExecuteReadyStateTextCommandAsync(SerialPort, command);
+                return await ExecuteReadyStateTextCommandAsync(SerialPort.BaseStream, command);
             }
             catch
             {
@@ -88,7 +91,7 @@ namespace DS.GroundControl.Lib.Devices
             await SemaphoreSlim.WaitAsync();
             try
             {
-                return await ExecuteReadyStateBinaryCommandAsync(SerialPort, command);
+                return await ExecuteReadyStateBinaryCommandAsync(SerialPort.BaseStream, command);
             }
             catch
             {
@@ -126,80 +129,100 @@ namespace DS.GroundControl.Lib.Devices
         {
             return DisconnectedSource.TrySetResult();
         }
+        private void CompleteLifecycleSignalsCooperatively()
+        {
+            if (!Connected.IsCompleted) { ConnectedSource.TrySetCanceled(); }
+            if (!Disconnected.IsCompleted)
+            {
+                if (Connected.IsCompletedSuccessfully) { TryTransitionToDisconnected(); }
+                else { DisconnectedSource.TrySetCanceled(); }
+            }
+            if (!Faulted.IsCompleted) { FaultedSource.TrySetCanceled(); }
+        }
+        private void CancelLifecycleSignalsBestEffort()
+        {
+            if (!Connected.IsCompleted) { ConnectedSource.TrySetCanceled(); }
+            if (!Disconnected.IsCompleted) { DisconnectedSource.TrySetCanceled(); }
+            if (!Faulted.IsCompleted) { FaultedSource.TrySetCanceled(); }
+        }
+        private bool EnsureCanConnect()
+        {
+            return !Connected.IsCompleted && !Faulted.IsCompleted;
+        }
 
         #region static
-        private static Dictionary<string, Func<SerialPort, string, (string Command, string Response, string Result)>> Commands { get; } =
-            new Dictionary<string, Func<SerialPort, string, (string Command, string Response, string Result)>>()
+        private static IReadOnlyDictionary<string, Func<Stream, string, Task<(string Command, string Response, string Result)>>> Commands { get; } =
+            new Dictionary<string, Func<Stream, string, Task<(string Command, string Response, string Result)>>>()
             {
-                { "AT+CCLK?", ExecuteCCLKCurrentSettings },
-                { "AT+SBDRB", ExecuteSBDRB },
-                { "AT+SBDRT", ExecuteSBDRT },
-                { "AT+SBDWT", ExecuteSBDWT },
-                { "AT+SBDWB=", ExecuteSBDWB},
-                { "AT&V", ExecuteATAndV },
-                { "AT+GMR", ExecuteGMR },
-                { "AT+CGMR", ExecuteCGMR },
-                { "AT%R", ExecuteATPercentR },               
-                { "AT+CGMI", ExecuteResponseWithPayload },
-                { "AT+CGMM", ExecuteResponseWithPayload },
-                { "AT+CGSN", ExecuteResponseWithPayload },
-                { "AT+CIER=?", ExecuteResponseWithPayload },
-                { "AT+CIER?", ExecuteResponseWithPayload },
-                { "AT+CRIS", ExecuteResponseWithPayload },
-                { "AT+CRISX", ExecuteResponseWithPayload },
-                { "AT+CSQ", ExecuteResponseWithPayload },
-                { "AT+CSQ=?", ExecuteResponseWithPayload },
-                { "AT+CSQF", ExecuteResponseWithPayload },
-                { "AT+CULK?", ExecuteResponseWithPayload },
-                { "AT+GMI", ExecuteResponseWithPayload },
-                { "AT+GMM", ExecuteResponseWithPayload },
-                { "AT+GSN", ExecuteResponseWithPayload },
-                { "AT+IPR=?", ExecuteResponseWithPayload },
-                { "AT+IPR?", ExecuteResponseWithPayload },
-                { "AT+SBDLOE", ExecuteResponseWithPayload },
-                { "AT+SBDAREG=?", ExecuteResponseWithPayload },
-                { "AT+SBDAREG?", ExecuteResponseWithPayload },
-                { "AT+SBDC", ExecuteResponseWithPayload },
-                { "AT+SBDD0", ExecuteResponseWithPayload },
-                { "AT+SBDD1", ExecuteResponseWithPayload },
-                { "AT+SBDD2", ExecuteResponseWithPayload },
-                { "AT+SBDDSC?", ExecuteResponseWithPayload },
-                { "AT+SBDGW", ExecuteResponseWithPayload },
-                { "AT+SBDGWN", ExecuteResponseWithPayload },
-                { "AT+SBDI", ExecuteResponseWithPayload },
-                { "AT+SBDIX", ExecuteResponseWithPayload },
-                { "AT+SBDIXA", ExecuteResponseWithPayload },
-                { "AT+SBDMTA?", ExecuteResponseWithPayload },
-                { "AT+SBDMTA=?", ExecuteResponseWithPayload },
-                { "AT+SBDREG?", ExecuteResponseWithPayload },
-                { "AT+SBDS", ExecuteResponseWithPayload },
-                { "AT+SBDST?", ExecuteResponseWithPayload },
-                { "AT+SBDSX", ExecuteResponseWithPayload },
-                { "AT+SBDTC", ExecuteResponseWithPayload },
-                { "AT-MSGEOS", ExecuteResponseWithPayload },
-                { "AT-MSGEO", ExecuteResponseWithPayload },
-                { "AT-MSSTM", ExecuteResponseWithPayload },
-                { "ATI0", ExecuteResponseWithPayload },
-                { "ATI1", ExecuteResponseWithPayload },
-                { "ATI2", ExecuteResponseWithPayload },
-                { "ATI3", ExecuteResponseWithPayload },
-                { "ATI4", ExecuteResponseWithPayload },
-                { "ATI5", ExecuteResponseWithPayload },
-                { "ATI6", ExecuteResponseWithPayload },
-                { "ATI7", ExecuteResponseWithPayload },
-                { "AT+SBDWT=", ExecuteResponseWithoutPayload },                
-                { "AT&Y0", ExecuteResponseWithoutPayload },
-                { "AT&K0", ExecuteResponseWithoutPayload },
-                { "AT&K3", ExecuteResponseWithoutPayload },
-                { "AT*R1", ExecuteResponseWithoutPayload },
-                { "AT*F", ExecuteResponseWithoutPayload },
-                { "AT+SBDMTA=0", ExecuteResponseWithoutPayload },
-                { "AT+SBDMTA=1", ExecuteResponseWithoutPayload },
-                { "ATE1", ExecuteResponseWithoutPayload },
-                { "ATQ0", ExecuteResponseWithoutPayload },
-                { "AT", ExecuteResponseWithoutPayload },
-                { "ATV1", ExecuteResponseWithoutPayload },
-                { "ATV0", ExecuteResponseWithoutPayload }
+                { "AT+CCLK?", ExecuteCCLKCurrentSettingsAsync },
+                { "AT+SBDRB", ExecuteSBDRBAsync },
+                { "AT+SBDRT", ExecuteSBDRTAsync },
+                { "AT+SBDWT", ExecuteSBDWTAsync },
+                { "AT+SBDWB=", ExecuteSBDWBAsync},
+                { "AT&V", ExecuteATAndVAsync },
+                { "AT+GMR", ExecuteGMRAsync },
+                { "AT+CGMR", ExecuteCGMRAsync },
+                { "AT%R", ExecuteATPercentRAsync },               
+                { "AT+CGMI", ExecuteResponseWithPayloadAsync },
+                { "AT+CGMM", ExecuteResponseWithPayloadAsync },
+                { "AT+CGSN", ExecuteResponseWithPayloadAsync },
+                { "AT+CIER=?", ExecuteResponseWithPayloadAsync },
+                { "AT+CIER?", ExecuteResponseWithPayloadAsync },
+                { "AT+CRIS", ExecuteResponseWithPayloadAsync },
+                { "AT+CRISX", ExecuteResponseWithPayloadAsync },
+                { "AT+CSQ", ExecuteResponseWithPayloadAsync },
+                { "AT+CSQ=?", ExecuteResponseWithPayloadAsync },
+                { "AT+CSQF", ExecuteResponseWithPayloadAsync },
+                { "AT+CULK?", ExecuteResponseWithPayloadAsync },
+                { "AT+GMI", ExecuteResponseWithPayloadAsync },
+                { "AT+GMM", ExecuteResponseWithPayloadAsync },
+                { "AT+GSN", ExecuteResponseWithPayloadAsync },
+                { "AT+IPR=?", ExecuteResponseWithPayloadAsync },
+                { "AT+IPR?", ExecuteResponseWithPayloadAsync },
+                { "AT+SBDLOE", ExecuteResponseWithPayloadAsync },
+                { "AT+SBDAREG=?", ExecuteResponseWithPayloadAsync },
+                { "AT+SBDAREG?", ExecuteResponseWithPayloadAsync },
+                { "AT+SBDC", ExecuteResponseWithPayloadAsync },
+                { "AT+SBDD0", ExecuteResponseWithPayloadAsync },
+                { "AT+SBDD1", ExecuteResponseWithPayloadAsync },
+                { "AT+SBDD2", ExecuteResponseWithPayloadAsync },
+                { "AT+SBDDSC?", ExecuteResponseWithPayloadAsync },
+                { "AT+SBDGW", ExecuteResponseWithPayloadAsync },
+                { "AT+SBDGWN", ExecuteResponseWithPayloadAsync },
+                { "AT+SBDI", ExecuteResponseWithPayloadAsync },
+                { "AT+SBDIX", ExecuteResponseWithPayloadAsync },
+                { "AT+SBDIXA", ExecuteResponseWithPayloadAsync },
+                { "AT+SBDMTA?", ExecuteResponseWithPayloadAsync },
+                { "AT+SBDMTA=?", ExecuteResponseWithPayloadAsync },
+                { "AT+SBDREG?", ExecuteResponseWithPayloadAsync },
+                { "AT+SBDS", ExecuteResponseWithPayloadAsync },
+                { "AT+SBDST?", ExecuteResponseWithPayloadAsync },
+                { "AT+SBDSX", ExecuteResponseWithPayloadAsync },
+                { "AT+SBDTC", ExecuteResponseWithPayloadAsync },
+                { "AT-MSGEOS", ExecuteResponseWithPayloadAsync },
+                { "AT-MSGEO", ExecuteResponseWithPayloadAsync },
+                { "AT-MSSTM", ExecuteResponseWithPayloadAsync },
+                { "ATI0", ExecuteResponseWithPayloadAsync },
+                { "ATI1", ExecuteResponseWithPayloadAsync },
+                { "ATI2", ExecuteResponseWithPayloadAsync },
+                { "ATI3", ExecuteResponseWithPayloadAsync },
+                { "ATI4", ExecuteResponseWithPayloadAsync },
+                { "ATI5", ExecuteResponseWithPayloadAsync },
+                { "ATI6", ExecuteResponseWithPayloadAsync },
+                { "ATI7", ExecuteResponseWithPayloadAsync },
+                { "AT+SBDWT=", ExecuteResponseWithoutPayloadAsync },                
+                { "AT&Y0", ExecuteResponseWithoutPayloadAsync },
+                { "AT&K0", ExecuteResponseWithoutPayloadAsync },
+                { "AT&K3", ExecuteResponseWithoutPayloadAsync },
+                { "AT*R1", ExecuteResponseWithoutPayloadAsync },
+                { "AT*F", ExecuteResponseWithoutPayloadAsync },
+                { "AT+SBDMTA=0", ExecuteResponseWithoutPayloadAsync },
+                { "AT+SBDMTA=1", ExecuteResponseWithoutPayloadAsync },
+                { "ATE1", ExecuteResponseWithoutPayloadAsync },
+                { "ATQ0", ExecuteResponseWithoutPayloadAsync },
+                { "AT", ExecuteResponseWithoutPayloadAsync },
+                { "ATV1", ExecuteResponseWithoutPayloadAsync },
+                { "ATV0", ExecuteResponseWithoutPayloadAsync }
             };
 
         public static async Task<SerialPort> TryLocateAndConnectAsync()
@@ -217,7 +240,7 @@ namespace DS.GroundControl.Lib.Devices
                         sp.Parity = Parity.None;
                         sp.StopBits = StopBits.One;
                         sp.Open();
-                        if (await TryValidateConnectionAsync(sp))
+                        if (await TryValidateConnectionAsync(sp.BaseStream))
                         {
                             return sp;
                         }
@@ -229,11 +252,11 @@ namespace DS.GroundControl.Lib.Devices
             catch { }
             return null;
         }
-        private static async Task<bool> TryValidateConnectionAsync(SerialPort sp)
+        private static async Task<bool> TryValidateConnectionAsync(Stream stream)
         {
             try
             {
-                var output = await ExecuteAsync(sp, "AT");
+                var output = await ExecuteAsync(stream, "AT");
                 if (output is { Command: "AT", Response: "", Result: "OK" or "0" })
                 {
                     return true;
@@ -242,157 +265,144 @@ namespace DS.GroundControl.Lib.Devices
             catch { }
             return false;
         }
-        private static async Task<(string Command, string Response, string Result)> ExecuteAsync(SerialPort sp, string command)
+        private static async Task<(string Command, string Response, string Result)> ExecuteAsync(Stream stream, string command)
         {
-            var execute = Task.Run(() =>
+            var cmd = command;
+            if (command.StartsWith("AT+SBDWT="))
             {
-                var cmd = command;
-                if (command.StartsWith("AT+SBDWT="))
-                {
-                    cmd = "AT+SBDWT=";
-                }
-                else if (command.StartsWith("AT+SBDWB="))
-                {
-                    cmd = "AT+SBDWB=";
-                }
-                var func = Commands[cmd];
-                return func(sp, command);
-            });
-            await execute.ThrowOnTimeoutAsync(TimeSpan.FromMinutes(1));
-            return await execute;
-        }
-        private static async Task<(string Command, string Response, string Result)> ExecuteReadyStateTextCommandAsync(SerialPort sp, string command)
-        {
-            var execute = Task.Run(() =>
+                cmd = "AT+SBDWT=";
+            }
+            else if (command.StartsWith("AT+SBDWB="))
             {
-                return ExecuteReadyStateTextCommand(sp, command);
-            });
-            await execute.ThrowOnTimeoutAsync(TimeSpan.FromMinutes(1));
-            return await execute;
+                cmd = "AT+SBDWB=";
+            }
+            var func = Commands[cmd];
+            return await func(stream, command);
         }
-        private static async Task<(string Command, string Response, string Result)> ExecuteReadyStateBinaryCommandAsync(SerialPort sp, string command)
+        private static async Task<(string Command, string Response, string Result)> ExecuteReadyStateTextCommandAsync(Stream stream, string command)
         {
-            var execute = Task.Run(() =>
-            {
-                return ExecuteReadyStateBinaryCommand(sp, command);
-            });
-            await execute.ThrowOnTimeoutAsync(TimeSpan.FromMinutes(1));
-            return await execute;
-        }
-        private static (string Command, string Response, string Result) ExecuteReadyStateTextCommand(SerialPort sp, string command)
-        {
-            var bytes = Encoding.ASCII.GetBytes(command + '\r');
-            sp.Write(bytes, 0, bytes.Length);
+            using var source = new CancellationTokenSource(TimeSpan.FromMinutes(1));
 
-            var cmd = sp.ReadTo("\r");
+            var bytes = Encoding.ASCII.GetBytes(command + '\r');
+            await stream.WriteAsync(bytes, 0, bytes.Length, source.Token);
+
+            var cmd = await stream.ReadToAsync("\r", source.Token);
             if (command.Length == cmd.Length) // ATV1 + AT+SBDWT + message
             {
                 cmd = cmd.Substring(0, cmd.Length - 1);
-                sp.ReadTo("\n");
-                var response = sp.ReadTo("\r\n");
-                sp.ReadTo("\r\n");
-                var result = sp.ReadTo("\r\n");
+                await stream.ReadToAsync("\n", source.Token);
+                var response = await stream.ReadToAsync("\r\n", source.Token);
+                await stream.ReadToAsync("\r\n", source.Token);
+                var result = await stream.ReadToAsync("\r\n", source.Token);
                 return (cmd, response, result);
             }
             else // ATV0 + AT+SBDWT + message 
             {
                 var response = cmd[cmd.Length - 1].ToString();
                 cmd = cmd.Substring(0, cmd.Length - 1);
-                sp.ReadTo("\n");
-                var result = sp.ReadTo("\r");
+                await stream.ReadToAsync("\n", source.Token);
+                var result = await stream.ReadToAsync("\r", source.Token);
                 return (cmd, response, result);
             }
         }
-        private static (string Command, string Response, string Result) ExecuteReadyStateBinaryCommand(SerialPort sp, string command)
+        private static async Task<(string Command, string Response, string Result)> ExecuteReadyStateBinaryCommandAsync(Stream stream, string command)
         {
+            using var source = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+
             var cks = CalculateChecksum(command);
             var bytes = Encoding.ASCII.GetBytes(command).Concat(cks).ToArray();
-            sp.Write(bytes, 0, bytes.Length);
+            await stream.WriteAsync(bytes, 0, bytes.Length, source.Token);
 
-            var next = sp.ReadChar();
+            var next = await stream.ReadByteAsync(source.Token);
             if (IsCarriageReturn(next)) // ATV1 + AT+SBDWB= + message
             {
-                var response = sp.ReadTo("\r\n");
-                sp.ReadTo("\r\n");
-                response = response[response.Length - 1].ToString();
-                var result = sp.ReadTo("\r\n");
+                var response = await stream.ReadToAsync("\r\n", source.Token);
+                await stream.ReadToAsync("\r\n", source.Token);
+                response = response[^1].ToString();
+                var result = await stream.ReadToAsync("\r\n", source.Token);
                 return (string.Empty, response, result);
             }
             else // ATV0 + AT+SBDWB= + message
             {
                 var response = Convert.ToChar(next).ToString();
-                sp.ReadTo("\r\n");
-                var result = sp.ReadTo("\r");           
+                await stream.ReadToAsync("\r\n", source.Token);
+                var result = await stream.ReadToAsync("\r", source.Token);           
                 return (string.Empty, response, result);
             }
         }
-        private static (string Command, string Response, string Result) ExecuteCCLKCurrentSettings(SerialPort sp, string command)
+        private static async Task<(string Command, string Response, string Result)> ExecuteCCLKCurrentSettingsAsync(Stream stream, string command)
         {
+            using var source = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+
             var bytes = Encoding.ASCII.GetBytes(command + '\r');
-            sp.Write(bytes, 0, bytes.Length);
+            await stream.WriteAsync(bytes, 0, bytes.Length, source.Token);
+
             while (true)
             {
                 var result = string.Empty;
                 var response = string.Empty;
-                var cmd = sp.ReadTo("\r");
+                var cmd = await stream.ReadToAsync("\r", source.Token);
                 if (cmd == command)
                 {
-                    var next = sp.ReadChar();
+                    var next = await stream.ReadByteAsync(source.Token);
                     if (IsCarriageReturn(next))
                     {
-                        sp.ReadTo("\n");
-                        response = sp.ReadTo("\n\r\n");
-                        sp.ReadTo("\r\n");
-                        result = sp.ReadTo("\r\n");
+                        await stream.ReadToAsync("\n", source.Token);
+                        response = await stream.ReadToAsync("\n\r\n", source.Token);
+                        await stream.ReadToAsync("\r\n", source.Token);
+                        result = await stream.ReadToAsync("\r\n", source.Token);
                     }
                     else if (IsAscii(next))
                     {
                         response += Convert.ToChar(next);
-                        response += sp.ReadTo("\n\r\n");
-                        result = sp.ReadTo("\r");
+                        response += await stream.ReadToAsync("\n\r\n", source.Token);
+                        result = await stream.ReadToAsync("\r", source.Token);
                     }
                 }
                 else
                 {
                     if (cmd != "126")
                     {
-                        sp.ReadTo("\n");
-                        sp.ReadTo("\r\n");
+                        await stream.ReadToAsync("\n", source.Token);
+                        await stream.ReadToAsync("\r\n", source.Token);
                     }
                     continue;
                 }
                 return (cmd, response, result);
             }
         }
-        private static (string Command, string Response, string Result) ExecuteSBDRB(SerialPort sp, string command)
+        private static async Task<(string Command, string Response, string Result)> ExecuteSBDRBAsync(Stream stream, string command)
         {
+            using var source = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+
             var bytes = Encoding.ASCII.GetBytes(command + '\r');
-            sp.Write(bytes, 0, bytes.Length);
+            await stream.WriteAsync(bytes, 0, bytes.Length, source.Token);
+
             while (true)
             {
                 var result = string.Empty;
                 var response = string.Empty;
-                var cmd = sp.ReadTo("\r");
+                var cmd = await stream.ReadToAsync("\r", source.Token);
                 if (cmd == command)
                 {
                     var len = new byte[2];
-                    sp.ReadExactly(len, 0, 2);
+                    await stream.ReadExactlyAsync(len, 0, 2, source.Token);
                     var msg = new byte[(len[0] << 8) | len[1]];
-                    sp.ReadExactly(msg, 0, msg.Length);
+                    await stream.ReadExactlyAsync(msg, 0, msg.Length, source.Token);
                     var cks = new byte[2];
-                    sp.ReadExactly(cks, 0, 2);
+                    await stream.ReadExactlyAsync(cks, 0, 2, source.Token);
 
-                    var next = sp.ReadChar();
+                    var next = await stream.ReadByteAsync(source.Token);
                     if (IsCarriageReturn(next))
                     {
-                        sp.ReadTo("\n");
-                        result = sp.ReadTo("\r\n");
+                        await stream.ReadToAsync("\n", source.Token);
+                        result = await stream.ReadToAsync("\r\n", source.Token);
                         response = Encoding.ASCII.GetString(len.Concat(msg).Concat(cks).ToArray());
                     }
                     else if (IsAscii(next))
                     {
                         result += Convert.ToChar(next);
-                        result += sp.ReadTo("\r");
+                        result += await stream.ReadToAsync("\r", source.Token);
                         response = Encoding.ASCII.GetString(len.Concat(msg).Concat(cks).ToArray());
                     }
                 }
@@ -400,39 +410,42 @@ namespace DS.GroundControl.Lib.Devices
                 {
                     if (cmd != "126")
                     {
-                        sp.ReadTo("\n");
-                        sp.ReadTo("\r\n");
+                        await stream.ReadToAsync("\n", source.Token);
+                        await stream.ReadToAsync("\r\n", source.Token);
                     }
                     continue;
                 }
                 return (cmd, response, result);
             }
         }
-        private static (string Command, string Response, string Result) ExecuteSBDRT(SerialPort sp, string command)
+        private static async Task<(string Command, string Response, string Result)> ExecuteSBDRTAsync(Stream stream, string command)
         {
+            using var source = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+
             var bytes = Encoding.ASCII.GetBytes(command + '\r');
-            sp.Write(bytes, 0, bytes.Length);
+            await stream.WriteAsync(bytes, 0, bytes.Length, source.Token);
+
             while (true)
             {
                 var result = string.Empty;
                 var response = string.Empty;
-                var cmd = sp.ReadTo("\r");
+                var cmd = await stream.ReadToAsync("\r", source.Token);
                 if (cmd == command)
                 {
-                    var next = sp.ReadChar();
+                    var next = await stream.ReadByteAsync(source.Token);
                     if (IsCarriageReturn(next))
                     {
-                        sp.ReadTo("\n");
-                        response += sp.ReadTo("\r\n");
-                        response += sp.ReadTo("\r\n");
-                        result = sp.ReadTo("\r\n");
+                        await stream.ReadToAsync("\n", source.Token);
+                        response += await stream.ReadToAsync("\r\n", source.Token);
+                        response += await stream.ReadToAsync("\r\n", source.Token);
+                        result = await stream.ReadToAsync("\r\n", source.Token);
                     }
                     else if (IsAscii(next))
                     {
                         response += Convert.ToChar(next);
-                        response += sp.ReadTo("\r\n");
-                        response += sp.ReadTo("\r");
-                        result = response[response.Length - 1].ToString();
+                        response += await stream.ReadToAsync("\r\n", source.Token);
+                        response += await stream.ReadToAsync("\r", source.Token);
+                        result = response[^1].ToString();
                         response = response.Remove(response.Length - 1);
                     }
                 }
@@ -440,108 +453,117 @@ namespace DS.GroundControl.Lib.Devices
                 {
                     if (cmd != "126")
                     {
-                        sp.ReadTo("\n");
-                        sp.ReadTo("\r\n");
+                        await stream.ReadToAsync("\n", source.Token);
+                        await stream.ReadToAsync("\r\n", source.Token);
                     }
                     continue;
                 }
                 return (cmd, response, result);
             }
         }
-        private static (string Command, string Response, string Result) ExecuteSBDWT(SerialPort sp, string command)
+        private static async Task<(string Command, string Response, string Result)> ExecuteSBDWTAsync(Stream stream, string command)
         {
+            using var source = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+
             var bytes = Encoding.ASCII.GetBytes(command + '\r');
-            sp.Write(bytes, 0, bytes.Length);
+            await stream.WriteAsync(bytes, 0, bytes.Length, source.Token);
+
             while (true)
             {
                 var result = string.Empty;
                 var response = string.Empty;
-                var cmd = sp.ReadTo("\r");
+                var cmd = await stream.ReadToAsync("\r", source.Token);
                 if (cmd == command)
                 {
-                    var next = sp.ReadChar();
+                    var next = await stream.ReadByteAsync(source.Token);
                     if (IsCarriageReturn(next))
                     {
-                        sp.ReadTo("\n");
-                        response = sp.ReadTo("\r\n");
+                        await stream.ReadToAsync("\n", source.Token);
+                        response = await stream.ReadToAsync("\r\n", source.Token);
                     }
                     else if (IsAscii(next))
                     {
                         response += Convert.ToChar(next);
-                        response += sp.ReadTo("\r\n");
+                        response += await stream.ReadToAsync("\r\n", source.Token);
                     }
                 }
                 else
                 {
                     if (cmd != "126")
                     {
-                        sp.ReadTo("\n");
-                        sp.ReadTo("\r\n");
+                        await stream.ReadToAsync("\n", source.Token);
+                        await stream.ReadToAsync("\r\n", source.Token);
                     }
                     continue;
                 }
                 return (cmd, response, result);
             }
         }
-        private static (string Command, string Response, string Result) ExecuteSBDWB(SerialPort sp, string command)
+        private static async Task<(string Command, string Response, string Result)> ExecuteSBDWBAsync(Stream stream, string command)
         {
+            using var source = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+
             var bytes = Encoding.ASCII.GetBytes(command + '\r');
-            sp.Write(bytes, 0, bytes.Length);
+            await stream.WriteAsync(bytes, 0, bytes.Length, source.Token);
+
             while (true)
             {
                 var result = string.Empty;
                 var response = string.Empty;
-                var cmd = sp.ReadTo("\r");
+                var cmd = await stream.ReadToAsync("\r", source.Token);
                 if (cmd == command)
                 {
-                    var next = sp.ReadChar();
+                    var next = await stream.ReadByteAsync(source.Token);
                     if (IsCarriageReturn(next))
                     {
-                        sp.ReadTo("\n");
-                        response = sp.ReadTo("\r\n");
+                        await stream.ReadToAsync("\n", source.Token);
+                        response = await stream.ReadToAsync("\r\n", source.Token);
                     }
                     else if (IsAscii(next))
                     {
                         response += Convert.ToChar(next);
-                        response += sp.ReadTo("\r\n");
+                        response += await stream.ReadToAsync("\r\n", source.Token);
                     }
                 }
                 else
                 {
                     if (cmd != "126")
                     {
-                        sp.ReadTo("\n");
-                        sp.ReadTo("\r\n");
+                        await stream.ReadToAsync("\n", source.Token);
+                        await stream.ReadToAsync("\r\n", source.Token);
                     }
                     continue;
                 }
                 return (cmd, response, result);
             }
         }
-        private static (string Command, string Response, string Result) ExecuteATAndV(SerialPort sp, string command)
+        private static async Task<(string Command, string Response, string Result)> ExecuteATAndVAsync(Stream stream, string command)
         {
+            using var source = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+
             var bytes = Encoding.ASCII.GetBytes(command + '\r');
-            sp.Write(bytes, 0, bytes.Length);
+            await stream.WriteAsync(bytes, 0, bytes.Length, source.Token);
+
             while (true)
             {
                 var result = string.Empty;
                 var response = string.Empty;
-                var cmd = sp.ReadTo("\r");
+                var cmd = await stream.ReadToAsync("\r", source.Token);
                 if (cmd == command)
                 {
-                    var next = sp.ReadChar();
+                    var next = await stream.ReadByteAsync(source.Token);
                     if (IsCarriageReturn(next))
                     {
-                        sp.ReadTo("\n");
+                        await stream.ReadToAsync("\n", source.Token);
                         int i = 0;
                         while (true)
                         {
-                            result = sp.ReadTo("\r\n");
+                            result = await stream.ReadToAsync("\r\n", source.Token);
                             if (i == 10)
                             {
                                 break;
                             }
-                            sp.ReadTo("\n");
+                            await stream.ReadToAsync("\n", source.Token);
                             response += result;
                             i++;
                         }
@@ -552,10 +574,10 @@ namespace DS.GroundControl.Lib.Devices
                         int i = 0;
                         while (true)
                         {
-                            result = sp.ReadTo("\r\n");
+                            result = await stream.ReadToAsync("\r\n", source.Token);
                             if (i == 9)
                             {
-                                result = sp.ReadTo("\r");
+                                result = await stream.ReadToAsync("\r", source.Token);
                                 break;
                             }
                             response += result;
@@ -567,38 +589,41 @@ namespace DS.GroundControl.Lib.Devices
                 {
                     if (cmd != "126")
                     {
-                        sp.ReadTo("\n");
-                        sp.ReadTo("\r\n");
+                        await stream.ReadToAsync("\n", source.Token);
+                        await stream.ReadToAsync("\r\n", source.Token);
                     }
                     continue;
                 }
                 return (cmd, response, result);
             }
         }
-        private static (string Command, string Response, string Result) ExecuteGMR(SerialPort sp, string command)
+        private static async Task<(string Command, string Response, string Result)> ExecuteGMRAsync(Stream stream, string command)
         {
+            using var source = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+
             var bytes = Encoding.ASCII.GetBytes(command + '\r');
-            sp.Write(bytes, 0, bytes.Length);
+            await stream.WriteAsync(bytes, 0, bytes.Length, source.Token);
+
             while (true)
             {
                 var result = string.Empty;
                 var response = string.Empty;
-                var cmd = sp.ReadTo("\r");
+                var cmd = await stream.ReadToAsync("\r", source.Token);
                 if (cmd == command)
                 {
-                    var next = sp.ReadChar();
+                    var next = await stream.ReadByteAsync(source.Token);
                     if (IsCarriageReturn(next))
                     {
-                        sp.ReadTo("\n");
+                        await stream.ReadToAsync("\n", source.Token);
                         int i = 0;
                         while (true)
                         {
-                            result = sp.ReadTo("\r\n");
+                            result = await stream.ReadToAsync("\r\n", source.Token);
                             if (i == 7)
                             {
                                 break;
                             }
-                            sp.ReadTo("\n");
+                            await stream.ReadToAsync("\n", source.Token);
                             response += result;
                             i++;
                         }
@@ -609,10 +634,10 @@ namespace DS.GroundControl.Lib.Devices
                         int i = 0;
                         while (true)
                         {
-                            result = sp.ReadTo("\r\n");
+                            result = await stream.ReadToAsync("\r\n", source.Token);
                             if (i == 6)
                             {
-                                result = sp.ReadTo("\r");
+                                result = await stream.ReadToAsync("\r", source.Token);
                                 break;
                             }
                             response += result;
@@ -624,38 +649,41 @@ namespace DS.GroundControl.Lib.Devices
                 {
                     if (cmd != "126")
                     {
-                        sp.ReadTo("\n");
-                        sp.ReadTo("\r\n");
+                        await stream.ReadToAsync("\n", source.Token);
+                        await stream.ReadToAsync("\r\n", source.Token);
                     }
                     continue;
                 }
                 return (cmd, response, result);
             }
         }
-        private static (string Command, string Response, string Result) ExecuteCGMR(SerialPort sp, string command)
+        private static async Task<(string Command, string Response, string Result)> ExecuteCGMRAsync(Stream stream, string command)
         {
+            using var source = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+
             var bytes = Encoding.ASCII.GetBytes(command + '\r');
-            sp.Write(bytes, 0, bytes.Length);
+            await stream.WriteAsync(bytes, 0, bytes.Length, source.Token);
+
             while (true)
             {
                 var result = string.Empty;
                 var response = string.Empty;
-                var cmd = sp.ReadTo("\r");
+                var cmd = await stream.ReadToAsync("\r", source.Token);
                 if (cmd == command)
                 {
-                    var next = sp.ReadChar();
+                    var next = await stream.ReadByteAsync(source.Token);
                     if (IsCarriageReturn(next))
                     {
-                        sp.ReadTo("\n");
+                        await stream.ReadToAsync("\n", source.Token);
                         int i = 0;
                         while (true)
                         {
-                            result = sp.ReadTo("\r\n");
+                            result = await stream.ReadToAsync("\r\n", source.Token);
                             if (i == 7)
                             {
                                 break;
                             }
-                            sp.ReadTo("\n");
+                            await stream.ReadToAsync("\n", source.Token);
                             response += result;
                             i++;
                         }
@@ -666,10 +694,10 @@ namespace DS.GroundControl.Lib.Devices
                         int i = 0;
                         while (true)
                         {
-                            result = sp.ReadTo("\r\n");
+                            result = await stream.ReadToAsync("\r\n", source.Token);
                             if (i == 6)
                             {
-                                result = sp.ReadTo("\r");
+                                result = await stream.ReadToAsync("\r", source.Token);
                                 break;
                             }
                             response += result;
@@ -681,38 +709,41 @@ namespace DS.GroundControl.Lib.Devices
                 {
                     if (cmd != "126")
                     {
-                        sp.ReadTo("\n");
-                        sp.ReadTo("\r\n");
+                        await stream.ReadToAsync("\n", source.Token);
+                        await stream.ReadToAsync("\r\n", source.Token);
                     }
                     continue;
                 }
                 return (cmd, response, result);
             }
         }
-        private static (string Command, string Response, string Result) ExecuteATPercentR(SerialPort sp, string command)
+        private static async Task<(string Command, string Response, string Result)> ExecuteATPercentRAsync(Stream stream, string command)
         {
+            using var source = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+
             var bytes = Encoding.ASCII.GetBytes(command + '\r');
-            sp.Write(bytes, 0, bytes.Length);
+            await stream.WriteAsync(bytes, 0, bytes.Length, source.Token);
+
             while (true)
             {
                 var result = string.Empty;
                 var response = string.Empty;
-                var cmd = sp.ReadTo("\r");
+                var cmd = await stream.ReadToAsync("\r", source.Token);
                 if (cmd == command)
                 {
-                    var next = sp.ReadChar();
+                    var next = await stream.ReadByteAsync(source.Token);
                     if (IsCarriageReturn(next))
                     {
-                        sp.ReadTo("\n");
+                        await stream.ReadToAsync("\n", source.Token);
                         int i = 0;
                         while (true)
                         {
-                            result = sp.ReadTo("\r\n");
+                            result = await stream.ReadToAsync("\r\n", source.Token);
                             if (i == 66)
                             {
                                 break;
                             }
-                            sp.ReadTo("\n");
+                            await stream.ReadToAsync("\n", source.Token);
                             response += result;
                             i++;
                         }
@@ -723,10 +754,10 @@ namespace DS.GroundControl.Lib.Devices
                         int i = 0;
                         while (true)
                         {
-                            result = sp.ReadTo("\r\n");
+                            result = await stream.ReadToAsync("\r\n", source.Token);
                             if (i == 65)
                             {
-                                result = sp.ReadTo("\r");
+                                result = await stream.ReadToAsync("\r", source.Token);
                                 break;
                             }
                             response += result;
@@ -738,80 +769,86 @@ namespace DS.GroundControl.Lib.Devices
                 {
                     if (cmd != "126")
                     {
-                        sp.ReadTo("\n");
-                        sp.ReadTo("\r\n");
+                        await stream.ReadToAsync("\n", source.Token);
+                        await stream.ReadToAsync("\r\n", source.Token);
                     }
                     continue;
                 }
                 return (cmd, response, result);
             }
         }
-        private static (string Command, string Response, string Result) ExecuteResponseWithPayload(SerialPort sp, string command)
+        private static async Task<(string Command, string Response, string Result)> ExecuteResponseWithPayloadAsync(Stream stream, string command)
         {
+            using var source = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+
             var bytes = Encoding.ASCII.GetBytes(command + '\r');
-            sp.Write(bytes, 0, bytes.Length);
+            await stream.WriteAsync(bytes, 0, bytes.Length, source.Token);
+
             while (true)
             {
                 var result = string.Empty;
                 var response = string.Empty;
-                var cmd = sp.ReadTo("\r");
+                var cmd = await stream.ReadToAsync("\r", source.Token);
                 if (cmd == command)
                 {
-                    var next = sp.ReadChar();
+                    var next = await stream.ReadByteAsync(source.Token);
                     if (IsCarriageReturn(next))
                     {
-                        sp.ReadTo("\n");
-                        response = sp.ReadTo("\r\n\r\n");
-                        result = sp.ReadTo("\r\n");
+                        await stream.ReadToAsync("\n", source.Token);
+                        response = await stream.ReadToAsync("\r\n\r\n", source.Token);
+                        result = await stream.ReadToAsync("\r\n", source.Token);
                     }
                     else if (IsAscii(next))
                     {
                         response += Convert.ToChar(next);
-                        response += sp.ReadTo("\r\n");
-                        result = sp.ReadTo("\r");
+                        response += await stream.ReadToAsync("\r\n", source.Token);
+                        result = await stream.ReadToAsync("\r", source.Token);
                     }
                 }
                 else
                 {
                     if (cmd != "126")
                     {
-                        sp.ReadTo("\n");
-                        sp.ReadTo("\r\n");
+                        await stream.ReadToAsync("\n", source.Token);
+                        await stream.ReadToAsync("\r\n", source.Token);
                     }
                     continue;
                 }
                 return (cmd, response, result);
             }
         }
-        private static (string Command, string Response, string Result) ExecuteResponseWithoutPayload(SerialPort sp, string command)
+        private static async Task<(string Command, string Response, string Result)> ExecuteResponseWithoutPayloadAsync(Stream stream, string command)
         {
+            using var source = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+
             var bytes = Encoding.ASCII.GetBytes(command + '\r');
-            sp.Write(bytes, 0, bytes.Length);
+            await stream.WriteAsync(bytes, 0, bytes.Length, source.Token);
+
             while (true)
             {
                 var result = string.Empty;
                 var response = string.Empty;
-                var cmd = sp.ReadTo("\r");
+                var cmd = await stream.ReadToAsync("\r", source.Token);
                 if (cmd == command)
                 {
-                    var next = sp.ReadChar();
+                    var next = await stream.ReadByteAsync(source.Token);
                     if (IsCarriageReturn(next))
                     {
-                        sp.ReadTo("\n");
-                        result = sp.ReadTo("\r\n");
+                        await stream.ReadToAsync("\n", source.Token);
+                        result = await stream.ReadToAsync("\r\n", source.Token);
                     }
                     else if (IsAscii(next))
                     {
                         result += Convert.ToChar(next);
-                        result += sp.ReadTo("\r");
+                        result += await stream.ReadToAsync("\r", source.Token);
                     }
                 }
                 else
                 {
                     if (cmd != "126")
                     {
-                        sp.ReadTo("\n");
-                        sp.ReadTo("\r\n");
+                        await stream.ReadToAsync("\n", source.Token);
+                        await stream.ReadToAsync("\r\n", source.Token);
                     }
                     continue;
                 }
@@ -830,12 +867,11 @@ namespace DS.GroundControl.Lib.Devices
             return new[] { (byte)(cks >> 8), (byte)(cks & 0xFF) };
         }
         private static bool IsAscii(int c) => (uint)c <= '\x007f';
-        private static bool IsLineFeed(int c) => (uint)c == '\x000a';
         private static bool IsCarriageReturn(int c) => (uint)c == '\x000d';
         #endregion
 
         #region idisposable
-        private bool _isDisposed;
+        private int _isDisposed;
         public void Dispose()
         {
             Dispose(true);
@@ -843,53 +879,25 @@ namespace DS.GroundControl.Lib.Devices
         }
         protected virtual void Dispose(bool disposing)
         {
-            if (!_isDisposed)
+            if (Interlocked.CompareExchange(ref _isDisposed, 1, 0) == 0)
             {
-                if (disposing)
+                if (SemaphoreSlim.Wait(0))
                 {
                     try
                     {
-                        if (SemaphoreSlim.Wait(0))
-                        {
-                            try
-                            {
-                                if (!Connected.IsCompleted)
-                                {
-                                    ConnectedSource.TrySetCanceled();
-                                }
-                                if (!Disconnected.IsCompleted)
-                                {
-                                    if (Connected.IsCompletedSuccessfully)
-                                    {
-                                        TryTransitionToDisconnected();
-                                    }
-                                    else
-                                    {
-                                        DisconnectedSource.TrySetCanceled();
-                                    }
-                                }
-                                if (!Faulted.IsCompleted)
-                                {
-                                    FaultedSource.TrySetCanceled();
-                                }
-                            }
-                            finally
-                            {
-                                SemaphoreSlim.Release();
-                            }
-                        }
-                        else
-                        {
-                            if (!Connected.IsCompleted) ConnectedSource.TrySetCanceled();
-                            if (!Disconnected.IsCompleted) DisconnectedSource.TrySetCanceled();
-                            if (!Faulted.IsCompleted) FaultedSource.TrySetCanceled();
-                        }
+                        CompleteLifecycleSignalsCooperatively();
                     }
-                    catch { }
-                    SerialPort?.Dispose();
-                    SemaphoreSlim.Dispose();
+                    finally
+                    {
+                        SemaphoreSlim.Release();
+                    }
                 }
-                _isDisposed = true;
+                else
+                {
+                    CancelLifecycleSignalsBestEffort();
+                }
+                SerialPort?.Dispose();
+                SemaphoreSlim.Dispose();
             }
         }
         #endregion

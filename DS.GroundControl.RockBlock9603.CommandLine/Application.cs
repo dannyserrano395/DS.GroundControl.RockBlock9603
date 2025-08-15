@@ -156,8 +156,7 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
         }
         private async Task<string> ExecuteAsync(string command)
         {
-            if (RockBlock9603 != null && RockBlock9603.Connected.IsCompletedSuccessfully &&
-                !RockBlock9603.Disconnected.IsCompleted && !RockBlock9603.Faulted.IsCompleted)
+            if (IsRockBlockUsable())
             {
                 try
                 {
@@ -178,8 +177,7 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
         }
         private async Task<string> ExecuteReadyStateTextCommandAsync(string command)
         {
-            if (RockBlock9603 != null && RockBlock9603.Connected.IsCompletedSuccessfully &&
-                !RockBlock9603.Disconnected.IsCompleted && !RockBlock9603.Faulted.IsCompleted)
+            if (IsRockBlockUsable())
             {
                 try
                 {
@@ -200,8 +198,7 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
         }
         private async Task<string> ExecuteReadyStateBinaryCommandAsync(string command)
         {
-            if (RockBlock9603 != null && RockBlock9603.Connected.IsCompletedSuccessfully &&
-                !RockBlock9603.Disconnected.IsCompleted && !RockBlock9603.Faulted.IsCompleted)
+            if (IsRockBlockUsable())
             {
                 try
                 {
@@ -222,8 +219,7 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
         }
         private async Task<string> RockBlockTimeAsync()
         {
-            if (RockBlock9603 != null && RockBlock9603.Connected.IsCompletedSuccessfully &&
-                !RockBlock9603.Disconnected.IsCompleted && !RockBlock9603.Faulted.IsCompleted)
+            if (IsRockBlockUsable())
             {
                 try
                 {
@@ -276,6 +272,11 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
                 }
             });
         }
+        private bool IsRockBlockUsable()
+        {
+            return RockBlock9603 != null && RockBlock9603.Connected.IsCompletedSuccessfully &&
+                !RockBlock9603.Disconnected.IsCompleted && !RockBlock9603.Faulted.IsCompleted;
+        }  
         private string ToJsonString<T>(T value) => JsonSerializer.Serialize(value, JsonSerializerOptions);
         private static string CalculateIridiumTime(string hex)
         {
