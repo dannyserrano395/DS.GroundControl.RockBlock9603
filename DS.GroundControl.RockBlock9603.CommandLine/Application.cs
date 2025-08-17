@@ -92,42 +92,30 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
             rootCommand.AddOption(xOption);
             rootCommand.AddOption(xTextOption);
             rootCommand.AddOption(xBinaryOption);
-            rootCommand.SetHandler(async (start, stop, shutdown, time, execute, xText, xBinary, status) =>
+            rootCommand.SetHandler(async (context) =>
             {
-                if (start)
-                {
-                    await Console.Out.WriteLineAsync(await RockBlockStartAsync());
-                }
-                else if (stop)
-                {
-                    await Console.Out.WriteLineAsync(RockBlockStop());
-                }
+                var start = context.ParseResult.GetValueForOption(startOption);
+                var stop = context.ParseResult.GetValueForOption(stopOption);
+                var shutdown = context.ParseResult.GetValueForOption(shutdownOption);
+                var time = context.ParseResult.GetValueForOption(timeOption);
+                var execute = context.ParseResult.GetValueForOption(xOption);
+                var xText = context.ParseResult.GetValueForOption(xTextOption);
+                var xBinary = context.ParseResult.GetValueForOption(xBinaryOption);   
+                var status = context.ParseResult.GetValueForOption(statusOption);
+
+                if (start) await Console.Out.WriteLineAsync(await RockBlockStartAsync());
+                else if (stop) await Console.Out.WriteLineAsync(RockBlockStop());
                 else if (shutdown)
                 {
                     await Console.Out.WriteLineAsync(RockBlockStop());
                     Environment.Exit(0);
                 }
-                else if (time)
-                {
-                    await Console.Out.WriteLineAsync(await RockBlockTimeAsync());
-                }
-                else if (execute != null)
-                {
-                    await Console.Out.WriteLineAsync(await ExecuteAsync(execute));
-                }
-                else if (xText != null)
-                {
-                    await Console.Out.WriteLineAsync(await ExecuteReadyStateTextCommandAsync(xText));
-                }
-                else if (xBinary != null)
-                {
-                    await Console.Out.WriteLineAsync(await ExecuteReadyStateBinaryCommandAsync(xBinary));
-                }
-                else if (status)
-                {
-                    await Console.Out.WriteLineAsync(RockBlockStatus());
-                }
-            }, startOption, stopOption, shutdownOption, timeOption, xOption, xTextOption, xBinaryOption, statusOption);
+                else if (time) await Console.Out.WriteLineAsync(await RockBlockTimeAsync());
+                else if (execute != null) await Console.Out.WriteLineAsync(await ExecuteAsync(execute));
+                else if (xText != null) await Console.Out.WriteLineAsync(await ExecuteReadyStateTextCommandAsync(xText));
+                else if (xBinary != null) await Console.Out.WriteLineAsync(await ExecuteReadyStateBinaryCommandAsync(xBinary));
+                else if (status) await Console.Out.WriteLineAsync(RockBlockStatus());
+            });
             rootCommand.AddValidator(result =>
             {
                 if (result.Children.Count(s => s.Symbol == startOption || s.Symbol == stopOption || s.Symbol == shutdownOption ||
