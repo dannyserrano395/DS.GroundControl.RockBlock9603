@@ -144,9 +144,9 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
         }
         private async Task<string> ExecuteAsync(string command)
         {
-            if (IsRockBlockUsable())
+            try
             {
-                try
+                if (IsRockBlockUsable())
                 {
                     var output = await RockBlock9603.ExecuteAsync(command);
                     return ToJsonString(new
@@ -159,15 +159,15 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
                         }
                     });
                 }
-                catch { }
             }
+            catch { }
             return RockBlockStatus();
         }
         private async Task<string> ExecuteReadyStateTextCommandAsync(string command)
         {
-            if (IsRockBlockUsable())
+            try
             {
-                try
+                if (IsRockBlockUsable())
                 {
                     var output = await RockBlock9603.ExecuteReadyStateTextCommandAsync(command);
                     return ToJsonString(new
@@ -180,15 +180,15 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
                         }
                     });
                 }
-                catch { }
             }
+            catch { }
             return RockBlockStatus();
         }
         private async Task<string> ExecuteReadyStateBinaryCommandAsync(string command)
         {
-            if (IsRockBlockUsable())
+            try
             {
-                try
+                if (IsRockBlockUsable())
                 {
                     var output = await RockBlock9603.ExecuteReadyStateBinaryCommandAsync(command);
                     return ToJsonString(new
@@ -201,21 +201,21 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
                         }
                     });
                 }
-                catch { }
             }
+            catch { }
             return RockBlockStatus();
         }
         private async Task<string> RockBlockTimeAsync()
         {
-            if (IsRockBlockUsable())
+            try
             {
-                try
+                if (IsRockBlockUsable())
                 {
                     var output = await RockBlock9603.ExecuteAsync("AT-MSSTM");
 
                     var hex = output.Response.Split("-MSSTM: ").Last();
-                    var time = hex.All(char.IsAsciiHexDigit)
-                        ? CalculateIridiumTime(hex)
+                    var time = hex.All(char.IsAsciiHexDigit) 
+                        ? CalculateIridiumTime(hex) 
                         : hex;
 
                     return ToJsonString(new
@@ -226,8 +226,8 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
                         }
                     });
                 }
-                catch { }
             }
+            catch { }
             return RockBlockStatus();
         }
         private string RockBlockStatus()
