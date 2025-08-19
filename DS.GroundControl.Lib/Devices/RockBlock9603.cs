@@ -339,57 +339,57 @@ namespace DS.GroundControl.Lib.Devices
         }
         private static async Task<(string Command, string Response, string Result)> ExecuteAsync(Stream stream, string command)
         {
-            var func = Commands[NormalizeCommand(command)];
-            using var source = new CancellationTokenSource(Timeouts[NormalizeCommand(command)]);
-            return await func(stream, command, source.Token);
+            using var cts = new CancellationTokenSource(Timeouts[NormalizeCommand(command)]);
+            var func = Commands[NormalizeCommand(command)];           
+            return await func(stream, command, cts.Token);
         }
         private static async Task<(string Command, string Response, string Result)> ExecuteReadyStateTextCommandAsync(Stream stream, string command)
         {
-            using var source = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
             var bytes = Encoding.ASCII.GetBytes(command + '\r');
-            await stream.WriteAsync(bytes, 0, bytes.Length, source.Token);
+            await stream.WriteAsync(bytes, 0, bytes.Length, cts.Token);
 
-            var cmd = await stream.ReadToAsync("\r", source.Token);
-            if (command.Length == cmd.Length) // ATV1 + AT+SBDWT + message
+            var cmd = await stream.ReadToAsync("\r", cts.Token);
+            if (cmd == command) // ATV1 + AT+SBDWT + message
             {
-                await stream.ReadToAsync("\n", source.Token);
-                var response = await stream.ReadToAsync("\r\n", source.Token);
-                await stream.ReadToAsync("\r\n", source.Token);
-                var result = await stream.ReadToAsync("\r\n", source.Token);
+                await stream.ReadToAsync("\n", cts.Token);
+                var response = await stream.ReadToAsync("\r\n", cts.Token);
+                await stream.ReadToAsync("\r\n", cts.Token);
+                var result = await stream.ReadToAsync("\r\n", cts.Token);
                 return (cmd, response, result);
             }
             else // ATV0 + AT+SBDWT + message 
             {
                 var response = cmd[^1].ToString();
                 cmd = cmd.Substring(0, cmd.Length - 1);
-                await stream.ReadToAsync("\n", source.Token);
-                var result = await stream.ReadToAsync("\r", source.Token);
+                await stream.ReadToAsync("\n", cts.Token);
+                var result = await stream.ReadToAsync("\r", cts.Token);
                 return (cmd, response, result);
             }
         }
         private static async Task<(string Command, string Response, string Result)> ExecuteReadyStateBinaryCommandAsync(Stream stream, string command)
         {
-            using var source = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
             var cks = CalculateChecksum(command);
             var bytes = Encoding.ASCII.GetBytes(command).Concat(cks).ToArray();
-            await stream.WriteAsync(bytes, 0, bytes.Length, source.Token);
+            await stream.WriteAsync(bytes, 0, bytes.Length, cts.Token);
 
-            var next = await stream.ReadByteAsync(source.Token);
+            var next = await stream.ReadByteAsync(cts.Token);
             if (IsCarriageReturn(next)) // ATV1 + AT+SBDWB= + message
             {
-                var response = await stream.ReadToAsync("\r\n", source.Token);
-                await stream.ReadToAsync("\r\n", source.Token);
+                var response = await stream.ReadToAsync("\r\n", cts.Token);
+                await stream.ReadToAsync("\r\n", cts.Token);
                 response = response[^1].ToString();
-                var result = await stream.ReadToAsync("\r\n", source.Token);
+                var result = await stream.ReadToAsync("\r\n", cts.Token);
                 return (string.Empty, response, result);
             }
             else // ATV0 + AT+SBDWB= + message
             {
                 var response = ((char)next).ToString();
-                await stream.ReadToAsync("\r\n", source.Token);
-                var result = await stream.ReadToAsync("\r", source.Token);           
+                await stream.ReadToAsync("\r\n", cts.Token);
+                var result = await stream.ReadToAsync("\r", cts.Token);           
                 return (string.Empty, response, result);
             }
         }

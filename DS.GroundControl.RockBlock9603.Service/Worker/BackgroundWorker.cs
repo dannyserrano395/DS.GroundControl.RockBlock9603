@@ -1,5 +1,4 @@
-﻿using DS.GroundControl.RockBlock9603.Service.Manager;
-using ILogger = DS.GroundControl.RockBlock9603.Service.Log4Net.ILogger;
+﻿using ILogger = DS.GroundControl.RockBlock9603.Service.Log4Net.ILogger;
 using IConfigurationManager = DS.GroundControl.RockBlock9603.Service.Configuration.IConfigurationManager;
 
 namespace DS.GroundControl.RockBlock9603.Service.Worker
@@ -9,18 +8,15 @@ namespace DS.GroundControl.RockBlock9603.Service.Worker
         private IHostApplicationLifetime HostApplicationLifetime { get; }
         private ILogger Log { get; }       
         private IConfigurationManager ConfigurationManager { get; }
-        private IRockBlock9603SessionManager IRockBlock9603ProcessManager { get; }
 
         public BackgroundWorker(
             IHostApplicationLifetime hostApplicationLifetime,
             ILogger log,
-            IConfigurationManager configurationManager,
-            IRockBlock9603SessionManager rockBlock9603ProcessManager)
+            IConfigurationManager configurationManager)
         {
             HostApplicationLifetime = hostApplicationLifetime;
             Log = log;
             ConfigurationManager = configurationManager;
-            IRockBlock9603ProcessManager = rockBlock9603ProcessManager;
         }
 
         private async Task<bool> WaitForAppStartedAsync(CancellationToken stoppingToken)
@@ -38,7 +34,7 @@ namespace DS.GroundControl.RockBlock9603.Service.Worker
             if (await WaitForAppStartedAsync(stoppingToken))
             {
                 Log.Info($"{ConfigurationManager.ServiceConfiguration.ServiceName} - Started");
-                await IRockBlock9603ProcessManager.StartAsync();
+                
             }
             return;
         }
@@ -59,7 +55,7 @@ namespace DS.GroundControl.RockBlock9603.Service.Worker
         {
             Log.Info($"{ConfigurationManager.ServiceConfiguration.ServiceName} - Stopping");
 
-            await IRockBlock9603ProcessManager.StopAsync();
+            
             await base.StopAsync(cancellationToken);
 
             return;

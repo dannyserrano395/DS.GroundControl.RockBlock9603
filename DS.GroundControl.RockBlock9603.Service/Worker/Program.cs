@@ -1,7 +1,5 @@
 using log4net;
 using System.Reflection;
-using DS.GroundControl.RockBlock9603.Service.Factories;
-using DS.GroundControl.RockBlock9603.Service.Manager;
 using ILoggerFactory = DS.GroundControl.RockBlock9603.Service.Log4Net.ILoggerFactory;
 using LoggerFactory = DS.GroundControl.RockBlock9603.Service.Log4Net.LoggerFactory;
 using IConfigurationManager = DS.GroundControl.RockBlock9603.Service.Configuration.IConfigurationManager;
@@ -34,8 +32,6 @@ namespace DS.GroundControl.RockBlock9603.Service.Worker
                 })
                 .AddSingleton<IConfigurationManager, ConfigurationManager>()
                 .AddSingleton<IRockBlock9603Factory, RockBlock9603Factory>()
-                .AddSingleton<IRockBlock9603ProcessFactory, RockBlock9603ProcessFactory>()             
-                .AddSingleton<IRockBlock9603SessionManager, RockBlock9603SessionManager>()
                 .AddHostedService<BackgroundWorker>();
             })
             .ConfigureHostOptions(options =>
