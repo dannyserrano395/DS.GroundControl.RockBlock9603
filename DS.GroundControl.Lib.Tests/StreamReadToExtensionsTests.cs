@@ -12,14 +12,14 @@ namespace DS.GroundControl.Lib.Tests
         [TestCase("OK\r\n", "\r\n", "OK")]
         [TestCase("\nOK\r\n", "\r", "\nOK")]
         [TestCase("\rOK\r\n", "\n", "\rOK\r")]
-        public async Task ReadToAsync_Returns_Text_Before_Delimiter(string str, string value, string expected)
+        public async Task ReadToAsync_Returns_TextBeforeDelimiter(string str, string value, string expected)
         {
             using var stream = MakeStream(str);
             var result = await stream.ReadToAsync(value);
             Assert.That(result, Is.EqualTo(expected));
         }
         [Test]
-        public void ReadToAsync_Throws_EndOfStream_When_Delimiter_Not_Found()
+        public void ReadToAsync_Throws_EndOfStream_WhenDelimiterNotFound()
         {
             using var stream = MakeStream("NO DELIMITER HERE");
             Assert.That(async () => await stream.ReadToAsync("\r\n"),

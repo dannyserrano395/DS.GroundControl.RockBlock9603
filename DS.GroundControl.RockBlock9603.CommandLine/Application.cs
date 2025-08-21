@@ -111,7 +111,7 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
                     Environment.Exit(0);
                 }
                 else if (time) await Console.Out.WriteLineAsync(await RockBlockTimeAsync());
-                else if (execute != null) await Console.Out.WriteLineAsync(await ExecuteAsync(execute));
+                else if (execute != null) await Console.Out.WriteLineAsync(await ExecuteCommandAsync(execute));
                 else if (xText != null) await Console.Out.WriteLineAsync(await ExecuteReadyStateTextCommandAsync(xText));
                 else if (xBinary != null) await Console.Out.WriteLineAsync(await ExecuteReadyStateBinaryCommandAsync(xBinary));
                 else if (status) await Console.Out.WriteLineAsync(RockBlockStatus());
@@ -142,13 +142,13 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
             }
             return RockBlockStatus();
         }
-        private async Task<string> ExecuteAsync(string command)
+        private async Task<string> ExecuteCommandAsync(string command)
         {
             try
             {
                 if (IsRockBlockUsable())
                 {
-                    var output = await RockBlock9603.ExecuteAsync(command);
+                    var output = await RockBlock9603.ExecuteCommandAsync(command);
                     return ToJsonString(new
                     {
                         ISU = new
@@ -211,7 +211,7 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
             {
                 if (IsRockBlockUsable())
                 {
-                    var output = await RockBlock9603.ExecuteAsync("AT-MSSTM");
+                    var output = await RockBlock9603.ExecuteCommandAsync("AT-MSSTM");
 
                     var hex = output.Response.Split("-MSSTM: ").Last();
                     var time = hex.All(char.IsAsciiHexDigit) 
