@@ -23,105 +23,91 @@ namespace DS.GroundControl.RockBlock9603.Setup
 
         public async Task<int> StartAsync(string[] args)
         {
-            var installOption = new Option<bool>(
-            name: "--install",
-            description: "Installs the RockBlock9603 service.");
+            var root = new RootCommand("Setup application for the RockBlock9603 service.");
+            var install = new Command("install", "Installs the RockBlock9603 service.");
+            var uninstall = new Command("uninstall", "Uninstalls the RockBlock9603 service.");
 
-            var uninstallOption = new Option<bool>(
-            name: "--uninstall",
-            description: "Uninstalls the RockBlock9603 service.");
-
-            var rootCommand = new RootCommand("Setup application for the RockBlock9603 service.")
+            install.SetHandler((context) => 
             {
-                installOption,
-                uninstallOption
-            };
-            rootCommand.AddValidator(result =>
-            {
-                if (result.Children.Count(s => s.Symbol == installOption || s.Symbol == uninstallOption) > 1)
-                {
-                    result.ErrorMessage = $"\"Option '--{result.Children[0].Symbol.Name}' is a mutually exclusive option.\"";
-                }
+                context.ExitCode = Install() ? 0 : 1;
             });
-            rootCommand.SetHandler((install, uninstall) =>
+            uninstall.SetHandler((context) =>
             {
-                if (install)
-                {
-                    ExecuteSetupCommand("--install");
-                }
-                else if (uninstall)
-                {
-                    ExecuteSetupCommand("--uninstall");
-                }
-            }, installOption, uninstallOption);
+                context.ExitCode = Uninstall() ? 0 : 1;
+            });
 
-            return await rootCommand.InvokeAsync(args);
+            root.AddCommand(install);
+            root.AddCommand(uninstall);
+            return await root.InvokeAsync(args);
         }
-        private void ExecuteSetupCommand(string option)
+        private bool Install()
         {
-            var serviceExePath = $"{AppContext.BaseDirectory}DS.GroundControl.RockBlock9603.Service.exe";
-            var serviceSettingsPath = $"{AppContext.BaseDirectory}_config\\ServiceConfiguration.config";
+            var svcExecutablePath = GetServiceExecutablePath();
+            var svcSettingsPath = GetServiceSettingsPath();
+            var svcSettings = GetServiceSettings(svcSettingsPath);
 
-            if (!File.Exists(serviceExePath))
-                throw new FileNotFoundException($"The file \"{serviceExePath}\" was not found.");
-
-            if (!File.Exists(serviceSettingsPath))
-                throw new FileNotFoundException($"The file \"{serviceSettingsPath}\" was not found.");
-
-            var serviceSettings = GetServiceSettings(serviceSettingsPath);
-
-            switch (option.ToLower())
+            var query = Execute($"sc.exe query \"{svcSettings.ServiceName}\"");
+            if (!query.StandardOutput.StartsWith("[SC] EnumQueryServicesStatus:OpenService FAILED 1060:"))
             {
-                case "--install":
-                    {
-                        ExecuteInstallOption(serviceSettings, serviceExePath);
-                        break;
-                    }
-                case "--uninstall":
-                    {
-                        ExecuteUninstallOption(serviceSettings);
-                        break;
-                    }
+                Log.Info($"Installation failed: service already exists. {ToJsonString(query)}");
+                return false;
             }
-        }
-        private void ExecuteInstallOption((string ServiceName, string DisplayName, string Description) serviceSettings, string serviceExePath)
-        {
-            var cr = ExecuteCmdCommand($"sc.exe create \"{serviceSettings.ServiceName}\" binpath=\"{serviceExePath}\" start=\"auto\" displayname=\"{serviceSettings.DisplayName}\"");
-            var create = DeserializeAnonymousType(cr, new { Command = "", ExitCode = 0, StandardOutput = "", StandardError = "" });
 
-            if (create.StandardOutput != "[SC] CreateService SUCCESS\r\n")
+            var create = Execute($"sc.exe create \"{svcSettings.ServiceName}\" binpath= \"{svcExecutablePath}\" start= auto displayname= \"{svcSettings.DisplayName}\"");
+            if (!create.StandardOutput.StartsWith("[SC] CreateService SUCCESS"))
             {
                 Log.Info($"Installation failed. {ToJsonString(create)}");
-                return;
+                return false;
             }
 
-            var desc = ExecuteCmdCommand($"sc.exe description \"{serviceSettings.ServiceName}\" \"{serviceSettings.Description}\"");
-            var description = DeserializeAnonymousType(desc, new { Command = "", ExitCode = 0, StandardOutput = "", StandardError = "" });
-
-            if (description.StandardOutput != "[SC] ChangeServiceConfig2 SUCCESS\r\n")
+            var description = Execute($"sc.exe description \"{svcSettings.ServiceName}\" \"{svcSettings.Description}\"");
+            if (!description.StandardOutput.StartsWith("[SC] ChangeServiceConfig2 SUCCESS"))
             {
                 Log.Info($"Installation completed with issues. {ToJsonString(description)}");
             }
 
-            Log.Info("Installation complete. The application was successfully installed and is ready to use.");
+            Log.Info("Installation complete: service successfully installed.");
+            return true;
         }
-        private void ExecuteUninstallOption((string ServiceName, string DisplayName, string Description) serviceSettings)
+        private bool Uninstall()
         {
-            var del = ExecuteCmdCommand($"sc.exe delete \"{serviceSettings.ServiceName}\"");
-            var delete = DeserializeAnonymousType(del, new { Command = "", ExitCode = 0, StandardOutput = "", StandardError = "" });
+            var svcSettingsPath = GetServiceSettingsPath();
+            var svcSettings = GetServiceSettings(svcSettingsPath);
 
-            if (delete.StandardOutput != "[SC] DeleteService SUCCESS\r\n")
+            var query = Execute($"sc.exe query \"{svcSettings.ServiceName}\"");
+            if (query.StandardOutput.StartsWith("[SC] EnumQueryServicesStatus:OpenService FAILED 1060:"))
             {
-                Log.Info($"Uninstallation failed. {ToJsonString(delete)}");
-                return;
+                Log.Info($"Uninstallation canceled: service does not exist. {ToJsonString(query)}");
+                return false;
             }
 
-            Log.Info("Uninstallation complete. The application was successfully uninstalled.");
+            var stop = Execute($"sc.exe stop \"{svcSettings.ServiceName}\"");
+            var delete = Execute($"sc.exe delete \"{svcSettings.ServiceName}\"");
+            if (!delete.StandardOutput.StartsWith("[SC] DeleteService SUCCESS"))
+            {
+                Log.Info($"Uninstallation failed. {ToJsonString(delete)}");
+                return false;
+            }
+
+            Log.Info("Uninstallation complete: service successfully uninstalled.");
+            return true;
         }
-        private static (string ServiceName, string DisplayName, string Description) GetServiceSettings(string serviceSettingsPath)
+        private static string GetServiceExecutablePath()
+        {
+            var path = Path.Combine(AppContext.BaseDirectory, "DS.GroundControl.RockBlock9603.Service.exe");
+            if (!File.Exists(path)) throw new FileNotFoundException($"The file \"{path}\" was not found.");
+            return path;
+        }
+        private static string GetServiceSettingsPath()
+        {
+            var path = Path.Combine(AppContext.BaseDirectory, "_config", "ServiceConfiguration.config");
+            if (!File.Exists(path)) throw new FileNotFoundException($"The file \"{path}\" was not found.");
+            return path;
+        }
+        private static (string ServiceName, string DisplayName, string Description) GetServiceSettings(string path)
         {
             var parentNode = new XmlDocument();
-            parentNode.Load(serviceSettingsPath);
+            parentNode.Load(path);
 
             var nodes = parentNode["serviceConfiguration"].ChildNodes;
 
@@ -146,7 +132,7 @@ namespace DS.GroundControl.RockBlock9603.Setup
 
             return (serviceName, displayName, description);
         }
-        private string ExecuteCmdCommand(string command)
+        private static (string Command, string ExitCode, string StandardOutput, string StandardError) Execute(string command)
         {
             using var process = new Process()
             {
@@ -156,6 +142,8 @@ namespace DS.GroundControl.RockBlock9603.Setup
                     Arguments = $"/c {command}",
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
                 }
             };
             process.Start();
@@ -165,15 +153,8 @@ namespace DS.GroundControl.RockBlock9603.Setup
 
             process.WaitForExit();
 
-            return ToJsonString(new
-            {
-                Command = command,
-                process.ExitCode,
-                StandardOutput = standardOutput,
-                StandardError = standardError,
-            });
+            return (command, process.ExitCode.ToString(), standardOutput, standardError);
         }
-        private static T DeserializeAnonymousType<T>(string json, T anonymousType) => JsonSerializer.Deserialize<T>(json);
         private string ToJsonString<T>(T value) => JsonSerializer.Serialize(value, JsonSerializerOptions);
     }
 }
