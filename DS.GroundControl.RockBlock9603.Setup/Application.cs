@@ -49,7 +49,7 @@ namespace DS.GroundControl.RockBlock9603.Setup
             var query = Execute($"sc.exe query \"{svcSettings.ServiceName}\"");
             if (!query.StandardOutput.StartsWith("[SC] EnumQueryServicesStatus:OpenService FAILED 1060:"))
             {
-                Log.Info($"Installation failed: service already exists. {ToJsonString(query)}");
+                Log.Info($"Installation canceled: service already exists. {ToJsonString(query)}");
                 return false;
             }
 
@@ -66,7 +66,7 @@ namespace DS.GroundControl.RockBlock9603.Setup
                 Log.Info($"Installation completed with issues. {ToJsonString(description)}");
             }
 
-            Log.Info("Installation complete: service successfully installed.");
+            Log.Info("Installation completed: service successfully installed.");
             return true;
         }
         private bool Uninstall()
@@ -89,7 +89,7 @@ namespace DS.GroundControl.RockBlock9603.Setup
                 return false;
             }
 
-            Log.Info("Uninstallation complete: service successfully uninstalled.");
+            Log.Info("Uninstallation completed: service successfully uninstalled.");
             return true;
         }
         private static string GetServiceExecutablePath()
