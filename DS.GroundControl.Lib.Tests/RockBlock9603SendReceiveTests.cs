@@ -1,3 +1,4 @@
+using System.Text;
 using DS.GroundControl.Lib.Devices;
 
 namespace DS.GroundControl.Lib.Tests
@@ -115,7 +116,7 @@ namespace DS.GroundControl.Lib.Tests
             });
         }
         [Test]
-        public async Task SendBinary_UsingSBDWBInVerboseMode_ReturnsOk()
+        public async Task SendBase64_UsingSBDWBInVerboseMode_ReturnsOk()
         {
             var v1 = await RockBlock9603.ExecuteCommandAsync("ATV1");
             Assert.That(v1.Result, Is.EqualTo("OK"));
@@ -123,7 +124,8 @@ namespace DS.GroundControl.Lib.Tests
             var sbdwb = await RockBlock9603.ExecuteCommandAsync("AT+SBDWB=4");
             Assert.That(sbdwb.Response, Is.EqualTo("READY"));
 
-            var write = await RockBlock9603.ExecuteReadyStateBinaryCommandAsync("test");
+            var base64 = Convert.ToBase64String(Encoding.ASCII.GetBytes("test"));
+            var write = await RockBlock9603.ExecuteReadyStateBase64CommandAsync(base64);
             Assert.Multiple(() =>
             {
                 Assert.That(write.Response, Is.EqualTo("0"));
@@ -137,12 +139,12 @@ namespace DS.GroundControl.Lib.Tests
             Assert.Multiple(() =>
             {
                 Assert.That(sbdrb.Command, Is.EqualTo("AT+SBDRB"));
-                Assert.That(sbdrb.Response, Is.EqualTo("\0\u0004test\u0001?"));
+                Assert.That(sbdrb.Response, Is.EqualTo("AAR0ZXN0AcA="));
                 Assert.That(sbdrb.Result, Is.EqualTo("OK"));
             });
         }
         [Test]
-        public async Task SendBinary_UsingSBDWBInNumericMode_ReturnsZero()
+        public async Task SendBase64_UsingSBDWBInNumericMode_ReturnsZero()
         {
             var v0 = await RockBlock9603.ExecuteCommandAsync("ATV0");
             Assert.That(v0.Result, Is.EqualTo("0"));
@@ -150,7 +152,8 @@ namespace DS.GroundControl.Lib.Tests
             var sbdwb = await RockBlock9603.ExecuteCommandAsync("AT+SBDWB=4");
             Assert.That(sbdwb.Response, Is.EqualTo("READY"));
 
-            var write = await RockBlock9603.ExecuteReadyStateBinaryCommandAsync("test");
+            var base64 = Convert.ToBase64String(Encoding.ASCII.GetBytes("test"));
+            var write = await RockBlock9603.ExecuteReadyStateBase64CommandAsync(base64);
             Assert.Multiple(() =>
             {
                 Assert.That(write.Response, Is.EqualTo("0"));
@@ -164,7 +167,7 @@ namespace DS.GroundControl.Lib.Tests
             Assert.Multiple(() =>
             {
                 Assert.That(sbdrb.Command, Is.EqualTo("AT+SBDRB"));
-                Assert.That(sbdrb.Response, Is.EqualTo("\0\u0004test\u0001?"));
+                Assert.That(sbdrb.Response, Is.EqualTo("AAR0ZXN0AcA="));
                 Assert.That(sbdrb.Result, Is.EqualTo("0"));
             });
         }

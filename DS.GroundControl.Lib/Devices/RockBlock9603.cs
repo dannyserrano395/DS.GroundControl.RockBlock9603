@@ -89,12 +89,12 @@ namespace DS.GroundControl.Lib.Devices
                 SemaphoreSlim.Release();
             }
         }
-        public async Task<(string Command, string Response, string Result)> ExecuteReadyStateBinaryCommandAsync(string command)
+        public async Task<(string Command, string Response, string Result)> ExecuteReadyStateBase64CommandAsync(string command)
         {
             await SemaphoreSlim.WaitAsync();
             try
             {
-                var execute = await ReadyStateBinaryCommandAsync(SerialPort.BaseStream, command).WaitAsync(TimeSpan.FromSeconds(3));
+                var execute = await ReadyStateBase64CommandAsync(SerialPort.BaseStream, command).WaitAsync(TimeSpan.FromSeconds(3));
                 return execute;
             }
             catch
@@ -293,10 +293,11 @@ namespace DS.GroundControl.Lib.Devices
                 return (cmd, response, result);
             }
         }
-        private static async Task<(string Command, string Response, string Result)> ReadyStateBinaryCommandAsync(Stream stream, string command)
+        private static async Task<(string Command, string Response, string Result)> ReadyStateBase64CommandAsync(Stream stream, string command)
         {
-            var cks = CalculateChecksum(command);
-            var bytes = Encoding.ASCII.GetBytes(command).Concat(cks).ToArray();
+            var base64 = Convert.FromBase64String(command);
+            var cks = CalculateChecksum(base64);
+            var bytes = base64.Concat(cks).ToArray();
             await stream.WriteAsync(bytes, 0, bytes.Length);
 
             var next = await stream.ReadByteAsync();
@@ -317,7 +318,7 @@ namespace DS.GroundControl.Lib.Devices
             }
         }
         private static async Task<(string Command, string Response, string Result)> SBDReadBinaryAsync(Stream stream, string command)
-        {
+        {          
             var bytes = Encoding.ASCII.GetBytes(command + '\r');
             await stream.WriteAsync(bytes, 0, bytes.Length);
             while (true)
@@ -337,14 +338,14 @@ namespace DS.GroundControl.Lib.Devices
                     {
                         await stream.ReadToAsync("\n");
                         var result = await stream.ReadToAsync("\r\n");
-                        var response = Encoding.ASCII.GetString(len.Concat(msg).Concat(cks).ToArray());
+                        var response = Convert.ToBase64String(len.Concat(msg).Concat(cks).ToArray());
                         return (cmd, response, result);
                     }
                     else if (IsAscii(next))
                     {
                         var result = ((char)next).ToString();
                         result += await stream.ReadToAsync("\r");
-                        var response = Encoding.ASCII.GetString(len.Concat(msg).Concat(cks).ToArray());
+                        var response = Convert.ToBase64String(len.Concat(msg).Concat(cks).ToArray());
                         return (cmd, response, result);
                     }
                 }
@@ -815,9 +816,8 @@ namespace DS.GroundControl.Lib.Devices
             else if (command.StartsWith("AT+SBDWB=")) return "AT+SBDWB=";
             return command;
         }
-        private static byte[] CalculateChecksum(string payload)
+        private static byte[] CalculateChecksum(byte[] bytes)
         {
-            var bytes = Encoding.ASCII.GetBytes(payload);
             uint sum = 0;
             for (int i = 0; i < bytes.Length; i++)
             {

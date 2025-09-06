@@ -8,6 +8,6 @@
         Task ConnectAsync();
         Task<(string Command, string Response, string Result)> ExecuteCommandAsync(string command);
         Task<(string Command, string Response, string Result)> ExecuteReadyStateTextCommandAsync(string command);
-        Task<(string Command, string Response, string Result)> ExecuteReadyStateBinaryCommandAsync(string command);
+        Task<(string Command, string Response, string Result)> ExecuteReadyStateBase64CommandAsync(string command);
     }
 }

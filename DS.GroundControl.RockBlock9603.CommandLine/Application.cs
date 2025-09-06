@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+﻿using System.Text;
+using System.Text.Json;
 using System.Text.Encodings.Web;
 using System.CommandLine;
 using DS.GroundControl.Lib.Devices;
@@ -78,7 +79,15 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
 
             var xBinaryOption = new Option<string>(
                 name: "--x-binary",
-                description: "Execute in ready-state BINARY mode (adds checksum).")
+                description: "Execute in ready-state RAW BINARY mode (adds checksum).")
+            {
+                Arity = ArgumentArity.ExactlyOne,
+                AllowMultipleArgumentsPerToken = false
+            };
+
+            var xBase64Option = new Option<string>(
+                name: "--x-base64",
+                description: "Execute in ready-state BASE64 mode (adds checksum).")
             {
                 Arity = ArgumentArity.ExactlyOne,
                 AllowMultipleArgumentsPerToken = false
@@ -92,6 +101,7 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
             rootCommand.AddOption(xOption);
             rootCommand.AddOption(xTextOption);
             rootCommand.AddOption(xBinaryOption);
+            rootCommand.AddOption(xBase64Option);
             rootCommand.SetHandler(async (context) =>
             {
                 var start = context.ParseResult.GetValueForOption(startOption);
@@ -100,7 +110,8 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
                 var time = context.ParseResult.GetValueForOption(timeOption);
                 var execute = context.ParseResult.GetValueForOption(xOption);
                 var xText = context.ParseResult.GetValueForOption(xTextOption);
-                var xBinary = context.ParseResult.GetValueForOption(xBinaryOption);   
+                var xBinary = context.ParseResult.GetValueForOption(xBinaryOption);  
+                var xBase64 = context.ParseResult.GetValueForOption(xBase64Option);
                 var status = context.ParseResult.GetValueForOption(statusOption);
 
                 if (start) await Console.Out.WriteLineAsync(await RockBlockStartAsync());
@@ -114,12 +125,13 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
                 else if (execute != null) await Console.Out.WriteLineAsync(await ExecuteCommandAsync(execute));
                 else if (xText != null) await Console.Out.WriteLineAsync(await ExecuteReadyStateTextCommandAsync(xText));
                 else if (xBinary != null) await Console.Out.WriteLineAsync(await ExecuteReadyStateBinaryCommandAsync(xBinary));
+                else if (xBase64 != null) await Console.Out.WriteLineAsync(await ExecuteReadyStateBase64CommandAsync(xBase64));
                 else if (status) await Console.Out.WriteLineAsync(RockBlockStatus());
             });
             rootCommand.AddValidator(result =>
             {
-                if (result.Children.Count(s => s.Symbol == startOption || s.Symbol == stopOption || s.Symbol == shutdownOption ||
-                s.Symbol == timeOption || s.Symbol == xOption || s.Symbol == xTextOption || s.Symbol == xBinaryOption || s.Symbol == statusOption) > 1)
+                if (result.Children.Count(s => s.Symbol == startOption || s.Symbol == stopOption || s.Symbol == shutdownOption ||s.Symbol == timeOption ||
+                s.Symbol == xOption || s.Symbol == xTextOption || s.Symbol == xBinaryOption || s.Symbol == xBase64Option || s.Symbol == statusOption) > 1)
                 {
                     result.ErrorMessage = $"Option '--{result.Children[0].Symbol.Name}' is a mutually exclusive option.";
                 }
@@ -190,7 +202,29 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
             {
                 if (IsRockBlockUsable())
                 {
-                    var output = await RockBlock9603.ExecuteReadyStateBinaryCommandAsync(command);
+                    var base64 = Convert.ToBase64String(Encoding.ASCII.GetBytes(command));
+                    var output = await RockBlock9603.ExecuteReadyStateBase64CommandAsync(base64);
+                    return ToJsonString(new
+                    {
+                        ISU = new
+                        {
+                            output.Command,
+                            output.Response,
+                            output.Result
+                        }
+                    });
+                }
+            }
+            catch { }
+            return RockBlockStatus();
+        }
+        private async Task<string> ExecuteReadyStateBase64CommandAsync(string command)
+        {
+            try
+            {
+                if (IsRockBlockUsable())
+                {
+                    var output = await RockBlock9603.ExecuteReadyStateBase64CommandAsync(command);
                     return ToJsonString(new
                     {
                         ISU = new
@@ -279,6 +313,8 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
 }
 
 #region NUMERIC
+//test , AT+SBDWB=4 , --x-base64 dGVzdA==
+
 // %R {"ISU":{"Command":"AT%R
 // &Dn 
 // &Fn
@@ -355,6 +391,8 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
 #endregion
 
 #region VERBOSE
+//test , AT+SBDWB=4 , --x-base64 dGVzdA==
+
 // %R {"ISU":{"Command":"AT%R
 // &Dn 
 // &Fn
