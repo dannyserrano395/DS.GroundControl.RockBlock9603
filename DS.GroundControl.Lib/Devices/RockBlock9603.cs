@@ -349,15 +349,7 @@ namespace DS.GroundControl.Lib.Devices
                         return (cmd, response, result);
                     }
                 }
-                if (cmd != "126")
-                {
-                    await stream.ReadToAsync("\n");
-                    cmd = await stream.ReadToAsync("\r\n");
-                }
-                if (cmd is "126" or "SBDRING")
-                {
-
-                }
+                await UnsolicitedResultCodeAsync(stream, cmd);
             }
         }
         private static async Task<(string Command, string Response, string Result)> SBDReadTextAsync(Stream stream, string command)
@@ -388,15 +380,7 @@ namespace DS.GroundControl.Lib.Devices
                         return (cmd, response, result);
                     }
                 }
-                if (cmd != "126")
-                {
-                    await stream.ReadToAsync("\n");
-                    cmd = await stream.ReadToAsync("\r\n");
-                }
-                if (cmd is "126" or "SBDRING")
-                {
-
-                }
+                await UnsolicitedResultCodeAsync(stream, cmd);
             }
         }
         private static async Task<(string Command, string Response, string Result)> SBDWriteBinaryAsync(Stream stream, string command)
@@ -422,15 +406,7 @@ namespace DS.GroundControl.Lib.Devices
                         return (cmd, response, string.Empty);
                     }
                 }
-                if (cmd != "126")
-                {
-                    await stream.ReadToAsync("\n");
-                    cmd = await stream.ReadToAsync("\r\n");
-                }
-                if (cmd is "126" or "SBDRING")
-                {
-
-                }
+                await UnsolicitedResultCodeAsync(stream, cmd);
             }
         }
         private static async Task<(string Command, string Response, string Result)> SBDWriteTextAsync(Stream stream, string command)
@@ -456,15 +432,7 @@ namespace DS.GroundControl.Lib.Devices
                         return (cmd, response, string.Empty);
                     }
                 }
-                if (cmd != "126")
-                {
-                    await stream.ReadToAsync("\n");
-                    cmd = await stream.ReadToAsync("\r\n");
-                }
-                if (cmd is "126" or "SBDRING")
-                {
-
-                }
+                await UnsolicitedResultCodeAsync(stream, cmd);
             }
         }
         private static async Task<(string Command, string Response, string Result)> GMRAsync(Stream stream, string command)
@@ -473,11 +441,11 @@ namespace DS.GroundControl.Lib.Devices
             await stream.WriteAsync(bytes, 0, bytes.Length);
             while (true)
             {
-                var result = string.Empty;
-                var response = string.Empty;
                 var cmd = await stream.ReadToAsync("\r");
                 if (cmd == command)
                 {
+                    var result = string.Empty;
+                    var response = string.Empty;
                     var next = await stream.ReadByteAsync();
                     if (IsCarriageReturn(next))
                     {
@@ -515,15 +483,7 @@ namespace DS.GroundControl.Lib.Devices
                     }
                     return (cmd, response, result);
                 }
-                if (cmd != "126")
-                {
-                    await stream.ReadToAsync("\n");
-                    cmd = await stream.ReadToAsync("\r\n");
-                }
-                if (cmd is "126" or "SBDRING")
-                {
-
-                }
+                await UnsolicitedResultCodeAsync(stream, cmd);
             }
         }
         private static async Task<(string Command, string Response, string Result)> CGMRAsync(Stream stream, string command)
@@ -532,11 +492,11 @@ namespace DS.GroundControl.Lib.Devices
             await stream.WriteAsync(bytes, 0, bytes.Length);
             while (true)
             {
-                var result = string.Empty;
-                var response = string.Empty;
                 var cmd = await stream.ReadToAsync("\r");
                 if (cmd == command)
                 {
+                    var result = string.Empty;
+                    var response = string.Empty;
                     var next = await stream.ReadByteAsync();
                     if (IsCarriageReturn(next))
                     {
@@ -574,15 +534,7 @@ namespace DS.GroundControl.Lib.Devices
                     }
                     return (cmd, response, result);
                 }
-                if (cmd != "126")
-                {
-                    await stream.ReadToAsync("\n");
-                    cmd = await stream.ReadToAsync("\r\n");
-                }
-                if (cmd is "126" or "SBDRING")
-                {
-
-                }
+                await UnsolicitedResultCodeAsync(stream, cmd);
             }
         }
         private static async Task<(string Command, string Response, string Result)> CCLKCurrentSettingsAsync(Stream stream, string command)
@@ -611,15 +563,7 @@ namespace DS.GroundControl.Lib.Devices
                         return (cmd, response, result);
                     }
                 }
-                if (cmd != "126")
-                {
-                    await stream.ReadToAsync("\n");
-                    cmd = await stream.ReadToAsync("\r\n");
-                }
-                if (cmd is "126" or "SBDRING")
-                {
-
-                }
+                await UnsolicitedResultCodeAsync(stream, cmd);
             }
         }
         private static async Task<(string Command, string Response, string Result)> AndVAsync(Stream stream, string command)
@@ -627,12 +571,12 @@ namespace DS.GroundControl.Lib.Devices
             var bytes = Encoding.ASCII.GetBytes(command + '\r');
             await stream.WriteAsync(bytes, 0, bytes.Length);
             while (true)
-            {
-                var result = string.Empty;
-                var response = string.Empty;
+            {             
                 var cmd = await stream.ReadToAsync("\r");
                 if (cmd == command)
                 {
+                    var result = string.Empty;
+                    var response = string.Empty;
                     var next = await stream.ReadByteAsync();
                     if (IsCarriageReturn(next))
                     {
@@ -670,15 +614,7 @@ namespace DS.GroundControl.Lib.Devices
                     }
                     return (cmd, response, result);
                 }
-                if (cmd != "126")
-                {
-                    await stream.ReadToAsync("\n");
-                    cmd = await stream.ReadToAsync("\r\n");
-                }
-                if (cmd is "126" or "SBDRING")
-                {
-
-                }
+                await UnsolicitedResultCodeAsync(stream, cmd);
             }
         }
         private static async Task<(string Command, string Response, string Result)> PercentRAsync(Stream stream, string command)
@@ -687,11 +623,11 @@ namespace DS.GroundControl.Lib.Devices
             await stream.WriteAsync(bytes, 0, bytes.Length);
             while (true)
             {
-                var result = string.Empty;
-                var response = string.Empty;
                 var cmd = await stream.ReadToAsync("\r");
                 if (cmd == command)
                 {
+                    var result = string.Empty;
+                    var response = string.Empty;
                     var next = await stream.ReadByteAsync();
                     if (IsCarriageReturn(next))
                     {
@@ -729,15 +665,7 @@ namespace DS.GroundControl.Lib.Devices
                     }
                     return (cmd, response, result);
                 }
-                if (cmd != "126")
-                {
-                    await stream.ReadToAsync("\n");
-                    cmd = await stream.ReadToAsync("\r\n");
-                }
-                if (cmd is "126" or "SBDRING")
-                {
-
-                }
+                await UnsolicitedResultCodeAsync(stream, cmd);
             }
         }
         private static async Task<(string Command, string Response, string Result)> ResponseWithPayloadAsync(Stream stream, string command)
@@ -765,15 +693,7 @@ namespace DS.GroundControl.Lib.Devices
                         return (cmd, response, result);
                     }
                 }
-                if (cmd != "126")
-                {
-                    await stream.ReadToAsync("\n");
-                    cmd = await stream.ReadToAsync("\r\n");
-                }
-                if (cmd is "126" or "SBDRING")
-                {
-
-                }
+                await UnsolicitedResultCodeAsync(stream, cmd);
             }
         }
         private static async Task<(string Command, string Response, string Result)> ResponseWithoutPayloadAsync(Stream stream, string command)
@@ -799,15 +719,19 @@ namespace DS.GroundControl.Lib.Devices
                         return (cmd, string.Empty, result);
                     }
                 }
-                if (cmd != "126")
-                {
-                    await stream.ReadToAsync("\n");
-                    cmd = await stream.ReadToAsync("\r\n");
-                }
-                if (cmd is "126" or "SBDRING")
-                {
+                await UnsolicitedResultCodeAsync(stream, cmd);
+            }
+        }
+        private static async Task UnsolicitedResultCodeAsync(Stream stream, string code)
+        {
+            if (code != "126")
+            {
+                await stream.ReadToAsync("\n");
+                code = await stream.ReadToAsync("\r\n");
+            }
+            if (code is "126" or "SBDRING")
+            {
 
-                }
             }
         }
         private static string NormalizeCommand(string command)
