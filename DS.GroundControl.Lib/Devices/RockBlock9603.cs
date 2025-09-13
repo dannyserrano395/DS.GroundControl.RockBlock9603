@@ -54,7 +54,7 @@ namespace DS.GroundControl.Lib.Devices
             await SemaphoreSlim.WaitAsync();
             try
             {
-                ThrowIfFaultedOrNotConnected();
+                ThrowIfNotConnected();
                 var (func, timeout) = CommandMap[NormalizeCommand(command)];
                 var execute = await func(SerialPort.BaseStream, command).WaitAsync(timeout);
                 return execute;
@@ -79,7 +79,7 @@ namespace DS.GroundControl.Lib.Devices
             await SemaphoreSlim.WaitAsync();
             try
             {
-                ThrowIfFaultedOrNotConnected();
+                ThrowIfNotConnected();
                 var execute = await ReadyStateTextCommandAsync(SerialPort.BaseStream, command).WaitAsync(TimeSpan.FromSeconds(3));
                 return execute;
             }
@@ -103,7 +103,7 @@ namespace DS.GroundControl.Lib.Devices
             await SemaphoreSlim.WaitAsync();
             try
             {
-                ThrowIfFaultedOrNotConnected();
+                ThrowIfNotConnected();
                 var execute = await ReadyStateBase64CommandAsync(SerialPort.BaseStream, command).WaitAsync(TimeSpan.FromSeconds(3));
                 return execute;
             }
@@ -176,9 +176,9 @@ namespace DS.GroundControl.Lib.Devices
                 throw new DeviceConnectionException();
             }
         }
-        private void ThrowIfFaultedOrNotConnected()
+        private void ThrowIfNotConnected()
         {
-            if (Faulted.IsCompleted || !Connected.IsCompleted)
+            if (!Connected.IsCompleted || Faulted.IsCompleted)
             {
                 throw new DeviceConnectionException();
             }
