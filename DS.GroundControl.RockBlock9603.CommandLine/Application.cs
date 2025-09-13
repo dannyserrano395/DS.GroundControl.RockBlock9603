@@ -147,18 +147,22 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
         }
         private async Task<string> RockBlockStartAsync()
         {
-            if (RockBlock9603 == null)
+            try
             {
-                RockBlock9603 = RockBlock9603Factory.Create();
-                await RockBlock9603.ConnectAsync();
+                if (RockBlock9603 == null)
+                {
+                    RockBlock9603 = RockBlock9603Factory.Create();
+                    await RockBlock9603.ConnectAsync();
+                }
             }
+            catch { }
             return RockBlockStatus();
         }
         private async Task<string> ExecuteCommandAsync(string command)
         {
             try
             {
-                if (IsRockBlockUsable())
+                if (IsRockBlockConnected())
                 {
                     var output = await RockBlock9603.ExecuteCommandAsync(command);
                     return ToJsonString(new
@@ -179,7 +183,7 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
         {
             try
             {
-                if (IsRockBlockUsable())
+                if (IsRockBlockConnected())
                 {
                     var output = await RockBlock9603.ExecuteReadyStateTextCommandAsync(command);
                     return ToJsonString(new
@@ -200,7 +204,7 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
         {
             try
             {
-                if (IsRockBlockUsable())
+                if (IsRockBlockConnected())
                 {
                     var base64 = Convert.ToBase64String(Encoding.ASCII.GetBytes(command));
                     var output = await RockBlock9603.ExecuteReadyStateBase64CommandAsync(base64);
@@ -222,7 +226,7 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
         {
             try
             {
-                if (IsRockBlockUsable())
+                if (IsRockBlockConnected())
                 {
                     var output = await RockBlock9603.ExecuteReadyStateBase64CommandAsync(command);
                     return ToJsonString(new
@@ -243,7 +247,7 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
         {
             try
             {
-                if (IsRockBlockUsable())
+                if (IsRockBlockConnected())
                 {
                     var output = await RockBlock9603.ExecuteCommandAsync("AT-MSSTM");
 
@@ -294,7 +298,7 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
                 }
             });
         }
-        private bool IsRockBlockUsable()
+        private bool IsRockBlockConnected()
         {
             return RockBlock9603 != null && RockBlock9603.Connected.IsCompletedSuccessfully &&
                 !RockBlock9603.Disconnected.IsCompleted && !RockBlock9603.Faulted.IsCompleted;

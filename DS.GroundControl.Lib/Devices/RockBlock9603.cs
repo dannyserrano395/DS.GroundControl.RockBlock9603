@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using System.IO.Ports;
+using DS.GroundControl.Lib.Exceptions;
 using DS.GroundControl.Lib.Extensions;
 
 namespace DS.GroundControl.Lib.Devices
@@ -31,17 +32,17 @@ namespace DS.GroundControl.Lib.Devices
             await SemaphoreSlim.WaitAsync();
             try
             {
-                if (EnsureCanConnect())
-                {
-                    SerialPort = await TryLocateAndConnectAsync();
-                    if (SerialPort != null && TryTransitionToConnected())
-                    {
-                        return;
-                    }
-                }
+                ThrowIfConnectedOrFaulted();
+                SerialPort = await LocateAndConnectAsync();
+                TransitionToConnected();
+                return;
+            }
+            catch
+            {
                 TryTransitionToFaulted();
                 SerialPort?.Dispose();
                 SerialPort = null;
+                throw;
             }
             finally
             {
@@ -53,15 +54,19 @@ namespace DS.GroundControl.Lib.Devices
             await SemaphoreSlim.WaitAsync();
             try
             {
+                ThrowIfFaultedOrNotConnected();
                 var (func, timeout) = CommandMap[NormalizeCommand(command)];
                 var execute = await func(SerialPort.BaseStream, command).WaitAsync(timeout);
                 return execute;
             }
             catch
             {
-                TryTransitionToFaulted();
-                SerialPort?.Dispose();
-                SerialPort = null;
+                if (Connected.IsCompleted)
+                {
+                    TryTransitionToFaulted();
+                    SerialPort?.Dispose();
+                    SerialPort = null;
+                }
                 throw;
             }
             finally
@@ -74,14 +79,18 @@ namespace DS.GroundControl.Lib.Devices
             await SemaphoreSlim.WaitAsync();
             try
             {
+                ThrowIfFaultedOrNotConnected();
                 var execute = await ReadyStateTextCommandAsync(SerialPort.BaseStream, command).WaitAsync(TimeSpan.FromSeconds(3));
                 return execute;
             }
             catch
             {
-                TryTransitionToFaulted();
-                SerialPort?.Dispose();
-                SerialPort = null;
+                if (Connected.IsCompleted)
+                {
+                    TryTransitionToFaulted();
+                    SerialPort?.Dispose();
+                    SerialPort = null;
+                }
                 throw;
             }
             finally
@@ -94,19 +103,30 @@ namespace DS.GroundControl.Lib.Devices
             await SemaphoreSlim.WaitAsync();
             try
             {
+                ThrowIfFaultedOrNotConnected();
                 var execute = await ReadyStateBase64CommandAsync(SerialPort.BaseStream, command).WaitAsync(TimeSpan.FromSeconds(3));
                 return execute;
             }
             catch
             {
-                TryTransitionToFaulted();
-                SerialPort?.Dispose();
-                SerialPort = null;
+                if (Connected.IsCompleted)
+                {
+                    TryTransitionToFaulted();
+                    SerialPort?.Dispose();
+                    SerialPort = null;
+                }
                 throw;
             }
             finally
             {
                 SemaphoreSlim.Release();
+            }
+        }
+        private void TransitionToConnected()
+        {
+            if (!TryTransitionToConnected())
+            {
+                throw new DeviceConnectionException();
             }
         }
         private bool TryTransitionToConnected()
@@ -149,9 +169,19 @@ namespace DS.GroundControl.Lib.Devices
             if (!Disconnected.IsCompleted) { DisconnectedSource.TrySetCanceled(); }
             if (!Faulted.IsCompleted) { FaultedSource.TrySetCanceled(); }
         }
-        private bool EnsureCanConnect()
+        private void ThrowIfConnectedOrFaulted()
         {
-            return !Connected.IsCompleted && !Faulted.IsCompleted;
+            if (Connected.IsCompleted || Faulted.IsCompleted)
+            {
+                throw new DeviceConnectionException();
+            }
+        }
+        private void ThrowIfFaultedOrNotConnected()
+        {
+            if (Faulted.IsCompleted || !Connected.IsCompleted)
+            {
+                throw new DeviceConnectionException();
+            }
         }
 
         #region static
@@ -229,7 +259,7 @@ namespace DS.GroundControl.Lib.Devices
             { "ATV0",      (ResponseWithoutPayloadAsync, TimeSpan.FromSeconds(2)) }
         };
 
-        private static async Task<SerialPort> TryLocateAndConnectAsync()
+        private static async Task<SerialPort> LocateAndConnectAsync()
         {
             try
             {
@@ -254,7 +284,7 @@ namespace DS.GroundControl.Lib.Devices
                 }
             }
             catch { }
-            return null;
+            throw new DeviceConnectionException();
         }
         private static async Task<bool> TryValidateConnectionAsync(Stream stream)
         {
