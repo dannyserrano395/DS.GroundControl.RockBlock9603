@@ -261,29 +261,25 @@ namespace DS.GroundControl.Lib.Devices
 
         private static async Task<SerialPort> LocateAndConnectAsync()
         {
-            try
+            foreach (var name in SerialPort.GetPortNames())
             {
-                foreach (var name in SerialPort.GetPortNames())
+                var sp = new SerialPort();
+                try
                 {
-                    var sp = new SerialPort();
-                    try
+                    sp.PortName = name;
+                    sp.BaudRate = 19200;
+                    sp.DataBits = 8;
+                    sp.Parity = Parity.None;
+                    sp.StopBits = StopBits.One;
+                    sp.Open();
+                    if (await TryValidateConnectionAsync(sp.BaseStream))
                     {
-                        sp.PortName = name;
-                        sp.BaudRate = 19200;
-                        sp.DataBits = 8;
-                        sp.Parity = Parity.None;
-                        sp.StopBits = StopBits.One;
-                        sp.Open();
-                        if (await TryValidateConnectionAsync(sp.BaseStream))
-                        {
-                            return sp;
-                        }
+                        return sp;
                     }
-                    catch { }
-                    sp.Dispose();
                 }
+                catch { }
+                sp.Dispose();
             }
-            catch { }
             throw new DeviceConnectionException();
         }
         private static async Task<bool> TryValidateConnectionAsync(Stream stream)
