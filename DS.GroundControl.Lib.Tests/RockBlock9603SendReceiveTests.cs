@@ -12,7 +12,7 @@ namespace DS.GroundControl.Lib.Tests
         {
             RockBlock9603 = new RockBlock9603();
             _ = RockBlock9603.ConnectAsync();
-            await RockBlock9603.Connected;
+            await RockBlock9603.Connected.WaitAsync(TimeSpan.FromSeconds(3));
         }
 
         [OneTimeTearDown]

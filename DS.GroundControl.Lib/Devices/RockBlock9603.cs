@@ -141,25 +141,28 @@ namespace DS.GroundControl.Lib.Devices
         {
             if (FaultedSource.TrySetResult())
             {
-                if (Connected.IsCompletedSuccessfully)
-                {
-                    TryTransitionToDisconnected();
-                }
+                TryTransitionToDisconnected();
                 return true;
             }
             return false;
         }
         private bool TryTransitionToDisconnected()
         {
-            return DisconnectedSource.TrySetResult();
+            if (Connected.IsCompletedSuccessfully)
+            {
+                return DisconnectedSource.TrySetResult();
+            }
+            return false;
         }
         private void CompleteLifecycleSignalsCooperatively()
         {
             if (!Connected.IsCompleted) { ConnectedSource.TrySetCanceled(); }
             if (!Disconnected.IsCompleted)
             {
-                if (Connected.IsCompletedSuccessfully) { TryTransitionToDisconnected(); }
-                else { DisconnectedSource.TrySetCanceled(); }
+                if (!TryTransitionToDisconnected())
+                {
+                    DisconnectedSource.TrySetCanceled();
+                }
             }
             if (!Faulted.IsCompleted) { FaultedSource.TrySetCanceled(); }
         }
