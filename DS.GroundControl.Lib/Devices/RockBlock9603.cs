@@ -154,7 +154,7 @@ namespace DS.GroundControl.Lib.Devices
             }
             return false;
         }
-        private void CompleteLifecycleSignalsCooperatively()
+        private void CompleteTransitions()
         {
             if (!Connected.IsCompleted) { ConnectedSource.TrySetCanceled(); }
             if (!Disconnected.IsCompleted)
@@ -164,12 +164,6 @@ namespace DS.GroundControl.Lib.Devices
                     DisconnectedSource.TrySetCanceled();
                 }
             }
-            if (!Faulted.IsCompleted) { FaultedSource.TrySetCanceled(); }
-        }
-        private void CancelLifecycleSignalsBestEffort()
-        {
-            if (!Connected.IsCompleted) { ConnectedSource.TrySetCanceled(); }
-            if (!Disconnected.IsCompleted) { DisconnectedSource.TrySetCanceled(); }
             if (!Faulted.IsCompleted) { FaultedSource.TrySetCanceled(); }
         }
         private void ThrowIfConnectedOrFaulted()
@@ -798,7 +792,7 @@ namespace DS.GroundControl.Lib.Devices
                 {
                     try
                     {
-                        CompleteLifecycleSignalsCooperatively();
+                        CompleteTransitions();
                     }
                     finally
                     {
@@ -807,7 +801,7 @@ namespace DS.GroundControl.Lib.Devices
                 }
                 else
                 {
-                    CancelLifecycleSignalsBestEffort();
+                    CompleteTransitions();
                 }
                 SerialPort?.Dispose();
                 SemaphoreSlim.Dispose();
