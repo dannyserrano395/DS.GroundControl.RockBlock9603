@@ -32,9 +32,10 @@ namespace DS.GroundControl.Lib.Devices
             await SemaphoreSlim.WaitAsync();
             try
             {
-                ThrowIfConnectedOrFaulted();
+                ThrowIfAnyCompletedTransitions();
                 SerialPort = await LocateAndConnectAsync();
-                TransitionToConnected();
+                TryTransitionToConnected();
+                ThrowIfNotConnected();
                 return;
             }
             catch
@@ -122,20 +123,9 @@ namespace DS.GroundControl.Lib.Devices
                 SemaphoreSlim.Release();
             }
         }
-        private void TransitionToConnected()
-        {
-            if (!TryTransitionToConnected())
-            {
-                throw new DeviceConnectionException();
-            }
-        }
         private bool TryTransitionToConnected()
         {
-            if (!Faulted.IsCompleted)
-            {
-                return ConnectedSource.TrySetResult();
-            }
-            return false;
+            return !Faulted.IsCompleted && !Disconnected.IsCompleted && ConnectedSource.TrySetResult();
         }
         private bool TryTransitionToFaulted()
         {
@@ -148,13 +138,9 @@ namespace DS.GroundControl.Lib.Devices
         }
         private bool TryTransitionToDisconnected()
         {
-            if (Connected.IsCompletedSuccessfully)
-            {
-                return DisconnectedSource.TrySetResult();
-            }
-            return false;
+            return Connected.IsCompletedSuccessfully && DisconnectedSource.TrySetResult();
         }
-        private void CompleteTransitions()
+        private void CancelIncompleteTransitions()
         {
             if (!Connected.IsCompleted) { ConnectedSource.TrySetCanceled(); }
             if (!Disconnected.IsCompleted)
@@ -166,16 +152,16 @@ namespace DS.GroundControl.Lib.Devices
             }
             if (!Faulted.IsCompleted) { FaultedSource.TrySetCanceled(); }
         }
-        private void ThrowIfConnectedOrFaulted()
+        private void ThrowIfAnyCompletedTransitions()
         {
-            if (Connected.IsCompleted || Faulted.IsCompleted)
+            if (Connected.IsCompleted || Faulted.IsCompleted || Disconnected.IsCompleted)
             {
                 throw new DeviceConnectionException();
             }
         }
         private void ThrowIfNotConnected()
         {
-            if (!Connected.IsCompleted || Faulted.IsCompleted)
+            if (!(Connected.IsCompletedSuccessfully && !Faulted.IsCompleted && !Disconnected.IsCompleted))
             {
                 throw new DeviceConnectionException();
             }
@@ -185,11 +171,11 @@ namespace DS.GroundControl.Lib.Devices
         private static IReadOnlyDictionary<string, (Func<Stream, string, Task<(string Command, string Response, string Result)>>, TimeSpan)> CommandMap { get; } =
             new Dictionary<string, (Func<Stream, string, Task<(string Command, string Response, string Result)>>, TimeSpan)>
         {
-            { "AT+CCLK?",  (CCLKCurrentSettingsAsync, TimeSpan.FromSeconds(5)) },
-            { "AT+SBDRB",  (SBDReadBinaryAsync, TimeSpan.FromSeconds(5)) },
-            { "AT+SBDRT",  (SBDReadTextAsync, TimeSpan.FromSeconds(5)) },
-            { "AT+SBDWT",  (SBDWriteTextAsync, TimeSpan.FromSeconds(5)) },
-            { "AT+SBDWB=", (SBDWriteBinaryAsync, TimeSpan.FromSeconds(5)) },
+            { "AT+CCLK?",  (CCLKSettingsAsync, TimeSpan.FromSeconds(5)) },
+            { "AT+SBDRB",  (ReadBinaryAsync, TimeSpan.FromSeconds(5)) },
+            { "AT+SBDRT",  (ReadTextAsync, TimeSpan.FromSeconds(5)) },
+            { "AT+SBDWT",  (WriteTextAsync, TimeSpan.FromSeconds(5)) },
+            { "AT+SBDWB=", (WriteBinaryAsync, TimeSpan.FromSeconds(5)) },
             { "AT&V",      (AndVAsync, TimeSpan.FromSeconds(3)) },
             { "AT+GMR",    (GMRAsync, TimeSpan.FromSeconds(3)) },
             { "AT+CGMR",   (CGMRAsync, TimeSpan.FromSeconds(3)) },
@@ -299,7 +285,7 @@ namespace DS.GroundControl.Lib.Devices
             await stream.WriteAsync(bytes, 0, bytes.Length);
 
             var cmd = await stream.ReadToAsync("\r");
-            if (cmd == command) // ATV1 + AT+SBDWT + message
+            if (cmd == command)
             {
                 await stream.ReadToAsync("\n");
                 var response = await stream.ReadToAsync("\r\n");
@@ -307,7 +293,7 @@ namespace DS.GroundControl.Lib.Devices
                 var result = await stream.ReadToAsync("\r\n");
                 return (cmd, response, result);
             }
-            else // ATV0 + AT+SBDWT + message 
+            else
             {
                 var response = cmd[^1].ToString();
                 cmd = cmd.Substring(0, cmd.Length - 1);
@@ -324,7 +310,7 @@ namespace DS.GroundControl.Lib.Devices
             await stream.WriteAsync(bytes, 0, bytes.Length);
 
             var next = await stream.ReadByteAsync();
-            if (IsCarriageReturn(next)) // ATV1 + AT+SBDWB= + message
+            if (IsCarriageReturn(next))
             {
                 var response = await stream.ReadToAsync("\r\n");
                 await stream.ReadToAsync("\r\n");
@@ -332,7 +318,7 @@ namespace DS.GroundControl.Lib.Devices
                 var result = await stream.ReadToAsync("\r\n");
                 return (string.Empty, response, result);
             }
-            else // ATV0 + AT+SBDWB= + message
+            else
             {
                 var response = ((char)next).ToString();
                 await stream.ReadToAsync("\r\n");
@@ -340,7 +326,7 @@ namespace DS.GroundControl.Lib.Devices
                 return (string.Empty, response, result);
             }
         }
-        private static async Task<(string Command, string Response, string Result)> SBDReadBinaryAsync(Stream stream, string command)
+        private static async Task<(string Command, string Response, string Result)> ReadBinaryAsync(Stream stream, string command)
         {          
             var bytes = Encoding.ASCII.GetBytes(command + '\r');
             await stream.WriteAsync(bytes, 0, bytes.Length);
@@ -375,7 +361,7 @@ namespace DS.GroundControl.Lib.Devices
                 await UnsolicitedResultCodeAsync(stream, cmd);
             }
         }
-        private static async Task<(string Command, string Response, string Result)> SBDReadTextAsync(Stream stream, string command)
+        private static async Task<(string Command, string Response, string Result)> ReadTextAsync(Stream stream, string command)
         {
             var bytes = Encoding.ASCII.GetBytes(command + '\r');
             await stream.WriteAsync(bytes, 0, bytes.Length);
@@ -406,7 +392,7 @@ namespace DS.GroundControl.Lib.Devices
                 await UnsolicitedResultCodeAsync(stream, cmd);
             }
         }
-        private static async Task<(string Command, string Response, string Result)> SBDWriteBinaryAsync(Stream stream, string command)
+        private static async Task<(string Command, string Response, string Result)> WriteBinaryAsync(Stream stream, string command)
         {
             var bytes = Encoding.ASCII.GetBytes(command + '\r');
             await stream.WriteAsync(bytes, 0, bytes.Length);
@@ -432,7 +418,7 @@ namespace DS.GroundControl.Lib.Devices
                 await UnsolicitedResultCodeAsync(stream, cmd);
             }
         }
-        private static async Task<(string Command, string Response, string Result)> SBDWriteTextAsync(Stream stream, string command)
+        private static async Task<(string Command, string Response, string Result)> WriteTextAsync(Stream stream, string command)
         {
             var bytes = Encoding.ASCII.GetBytes(command + '\r');
             await stream.WriteAsync(bytes, 0, bytes.Length);
@@ -560,7 +546,7 @@ namespace DS.GroundControl.Lib.Devices
                 await UnsolicitedResultCodeAsync(stream, cmd);
             }
         }
-        private static async Task<(string Command, string Response, string Result)> CCLKCurrentSettingsAsync(Stream stream, string command)
+        private static async Task<(string Command, string Response, string Result)> CCLKSettingsAsync(Stream stream, string command)
         {
             var bytes = Encoding.ASCII.GetBytes(command + '\r');
             await stream.WriteAsync(bytes, 0, bytes.Length);
@@ -754,7 +740,7 @@ namespace DS.GroundControl.Lib.Devices
             }
             if (code is "126" or "SBDRING")
             {
-
+                
             }
         }
         private static string NormalizeCommand(string command)
@@ -792,7 +778,7 @@ namespace DS.GroundControl.Lib.Devices
                 {
                     try
                     {
-                        CompleteTransitions();
+                        CancelIncompleteTransitions();
                     }
                     finally
                     {
@@ -801,7 +787,7 @@ namespace DS.GroundControl.Lib.Devices
                 }
                 else
                 {
-                    CompleteTransitions();
+                    CancelIncompleteTransitions();
                 }
                 SerialPort?.Dispose();
                 SemaphoreSlim.Dispose();
