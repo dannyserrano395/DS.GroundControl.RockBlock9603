@@ -32,7 +32,7 @@ namespace DS.GroundControl.Lib.Devices
             await SemaphoreSlim.WaitAsync();
             try
             {
-                ThrowIfAnyCompletedTransitions();
+                ThrowIfAnyTransitionCompleted();
                 SerialPort = await LocateAndConnectAsync();
                 TryTransitionToConnected();
                 ThrowIfNotConnected();
@@ -152,7 +152,7 @@ namespace DS.GroundControl.Lib.Devices
             }
             if (!Faulted.IsCompleted) { FaultedSource.TrySetCanceled(); }
         }
-        private void ThrowIfAnyCompletedTransitions()
+        private void ThrowIfAnyTransitionCompleted()
         {
             if (Connected.IsCompleted || Faulted.IsCompleted || Disconnected.IsCompleted)
             {
