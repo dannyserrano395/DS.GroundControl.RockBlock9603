@@ -62,7 +62,7 @@ namespace DS.GroundControl.Lib.Devices
             }
             catch
             {
-                if (Connected.IsCompleted)
+                if (IsConnected())
                 {
                     TryTransitionToFaulted();
                     SerialPort?.Dispose();
@@ -86,7 +86,7 @@ namespace DS.GroundControl.Lib.Devices
             }
             catch
             {
-                if (Connected.IsCompleted)
+                if (IsConnected())
                 {
                     TryTransitionToFaulted();
                     SerialPort?.Dispose();
@@ -110,7 +110,7 @@ namespace DS.GroundControl.Lib.Devices
             }
             catch
             {
-                if (Connected.IsCompleted)
+                if (IsConnected())
                 {
                     TryTransitionToFaulted();
                     SerialPort?.Dispose();
@@ -161,10 +161,14 @@ namespace DS.GroundControl.Lib.Devices
         }
         private void ThrowIfNotConnected()
         {
-            if (!(Connected.IsCompletedSuccessfully && !Faulted.IsCompleted && !Disconnected.IsCompleted))
+            if (!IsConnected())
             {
                 throw new DeviceConnectionException();
             }
+        }
+        private bool IsConnected()
+        {
+            return Connected.IsCompletedSuccessfully && !Faulted.IsCompleted && !Disconnected.IsCompleted;
         }
 
         #region static
