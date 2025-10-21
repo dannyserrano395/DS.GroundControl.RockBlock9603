@@ -42,7 +42,6 @@ namespace DS.GroundControl.Lib.Devices
             {
                 TryTransitionToFaulted();
                 SerialPort?.Dispose();
-                SerialPort = null;
                 throw;
             }
             finally
@@ -66,7 +65,6 @@ namespace DS.GroundControl.Lib.Devices
                 {
                     TryTransitionToFaulted();
                     SerialPort?.Dispose();
-                    SerialPort = null;
                 }
                 throw;
             }
@@ -90,7 +88,6 @@ namespace DS.GroundControl.Lib.Devices
                 {
                     TryTransitionToFaulted();
                     SerialPort?.Dispose();
-                    SerialPort = null;
                 }
                 throw;
             }
@@ -114,7 +111,6 @@ namespace DS.GroundControl.Lib.Devices
                 {
                     TryTransitionToFaulted();
                     SerialPort?.Dispose();
-                    SerialPort = null;
                 }
                 throw;
             }
