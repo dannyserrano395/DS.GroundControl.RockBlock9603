@@ -1,4 +1,5 @@
 using System.Text;
+using System.IO.Ports;
 using DS.GroundControl.Lib.Devices;
 
 namespace DS.GroundControl.Lib.Tests
@@ -11,7 +12,7 @@ namespace DS.GroundControl.Lib.Tests
         public async Task Setup()
         {
             RockBlock9603 = new RockBlock9603();
-            _ = RockBlock9603.ConnectAsync();
+            _ = RockBlock9603.ConnectAsync(19200, 8, Parity.None, StopBits.One);
             await RockBlock9603.Connected.WaitAsync(TimeSpan.FromSeconds(3));
         }
 

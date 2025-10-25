@@ -27,16 +27,65 @@ namespace DS.GroundControl.Lib.Devices
             Faulted = FaultedSource.Task;
         }
 
-        public async Task ConnectAsync()
+        public async Task ConnectAsync(int baudRate, int dataBits, Parity parity, StopBits stopBits)
         {
             await SemaphoreSlim.WaitAsync();
             try
             {
                 ThrowIfAnyTransitionCompleted();
-                SerialPort = await LocateAndConnectAsync();
+                foreach (var name in SerialPort.GetPortNames())
+                {
+                    try
+                    {
+                        SerialPort = new SerialPort()
+                        {
+                            PortName = name,
+                            BaudRate = baudRate,
+                            DataBits = dataBits,
+                            Parity = parity,
+                            StopBits = stopBits
+                        };
+                        SerialPort.Open();
+                        await ValidateConnectionAsync();
+                        TryTransitionToConnected();
+                        break;
+                    }
+                    catch 
+                    {
+                        SerialPort?.Dispose();
+                    }
+                }              
+                ThrowIfNotConnected();
+            }
+            catch
+            {
+                TryTransitionToFaulted();
+                SerialPort?.Dispose();
+                throw;
+            }
+            finally
+            {
+                SemaphoreSlim.Release();
+            }
+        }
+        public async Task ConnectAsync(string portName, int baudRate, int dataBits, Parity parity, StopBits stopBits)
+        {
+            await SemaphoreSlim.WaitAsync();
+            try
+            {
+                ThrowIfAnyTransitionCompleted();
+                SerialPort = new SerialPort()
+                {
+                    PortName = portName,
+                    BaudRate = baudRate,
+                    DataBits = dataBits,
+                    Parity = parity,
+                    StopBits = stopBits
+                };
+                SerialPort.Open();
+                await ValidateConnectionAsync();
                 TryTransitionToConnected();
                 ThrowIfNotConnected();
-                return;
             }
             catch
             {
@@ -56,8 +105,8 @@ namespace DS.GroundControl.Lib.Devices
             {
                 ThrowIfNotConnected();
                 var (func, timeout) = CommandMap[NormalizeCommand(command)];
-                var execute = await func(SerialPort.BaseStream, command).WaitAsync(timeout);
-                return execute;
+                var output = await func(SerialPort.BaseStream, command).WaitAsync(timeout);
+                return output;
             }
             catch
             {
@@ -79,8 +128,8 @@ namespace DS.GroundControl.Lib.Devices
             try
             {
                 ThrowIfNotConnected();
-                var execute = await ReadyStateTextCommandAsync(SerialPort.BaseStream, command).WaitAsync(TimeSpan.FromSeconds(3));
-                return execute;
+                var output = await ReadyStateTextCommandAsync(SerialPort.BaseStream, command).WaitAsync(TimeSpan.FromSeconds(3));
+                return output;
             }
             catch
             {
@@ -102,8 +151,8 @@ namespace DS.GroundControl.Lib.Devices
             try
             {
                 ThrowIfNotConnected();
-                var execute = await ReadyStateBase64CommandAsync(SerialPort.BaseStream, command).WaitAsync(TimeSpan.FromSeconds(3));
-                return execute;
+                var output = await ReadyStateBase64CommandAsync(SerialPort.BaseStream, command).WaitAsync(TimeSpan.FromSeconds(3));
+                return output;
             }
             catch
             {
@@ -118,6 +167,20 @@ namespace DS.GroundControl.Lib.Devices
             {
                 SemaphoreSlim.Release();
             }
+        }
+        private async Task ValidateConnectionAsync()
+        {
+            try
+            {
+                var (func, timeout) = CommandMap[NormalizeCommand("AT")];
+                var output = await func(SerialPort.BaseStream, "AT").WaitAsync(timeout);
+                if (output is { Command: "AT", Response: "", Result: "OK" or "0" })
+                {
+                    return;
+                }
+            }
+            catch { }
+            throw new DeviceConnectionException();
         }
         private bool TryTransitionToConnected()
         {
@@ -165,7 +228,7 @@ namespace DS.GroundControl.Lib.Devices
         private bool IsConnected()
         {
             return Connected.IsCompletedSuccessfully && !Faulted.IsCompleted && !Disconnected.IsCompleted;
-        }
+        }  
 
         #region static
         private static IReadOnlyDictionary<string, (Func<Stream, string, Task<(string Command, string Response, string Result)>>, TimeSpan)> CommandMap { get; } =
@@ -242,43 +305,6 @@ namespace DS.GroundControl.Lib.Devices
             { "ATV0",      (ResponseWithoutPayloadAsync, TimeSpan.FromSeconds(2)) }
         };
 
-        private static async Task<SerialPort> LocateAndConnectAsync()
-        {
-            foreach (var name in SerialPort.GetPortNames())
-            {
-                var sp = new SerialPort();
-                try
-                {
-                    sp.PortName = name;
-                    sp.BaudRate = 19200;
-                    sp.DataBits = 8;
-                    sp.Parity = Parity.None;
-                    sp.StopBits = StopBits.One;
-                    sp.Open();
-                    if (await TryValidateConnectionAsync(sp.BaseStream))
-                    {
-                        return sp;
-                    }
-                }
-                catch { }
-                sp.Dispose();
-            }
-            throw new DeviceConnectionException();
-        }
-        private static async Task<bool> TryValidateConnectionAsync(Stream stream)
-        {
-            try
-            {
-                var (func, timeout) = CommandMap[NormalizeCommand("AT")];
-                var output = await func(stream, "AT").WaitAsync(timeout);
-                if (output is { Command: "AT", Response: "", Result: "OK" or "0" })
-                {
-                    return true;
-                }
-            }
-            catch { }
-            return false;
-        }
         private static async Task<(string Command, string Response, string Result)> ReadyStateTextCommandAsync(Stream stream, string command)
         {
             var bytes = Encoding.ASCII.GetBytes(command + '\r');

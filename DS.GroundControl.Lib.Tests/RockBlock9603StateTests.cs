@@ -1,4 +1,5 @@
-﻿using DS.GroundControl.Lib.Devices;
+﻿using System.IO.Ports;
+using DS.GroundControl.Lib.Devices;
 using DS.GroundControl.Lib.Exceptions;
 
 namespace DS.GroundControl.Lib.Tests
@@ -21,10 +22,10 @@ namespace DS.GroundControl.Lib.Tests
         public async Task Verify_Transitions_To_Faulted_When_ConnectAsync_Called_Twice()
         {
             using var rb = new RockBlock9603();
-            var connect = rb.ConnectAsync();
+            var connect = rb.ConnectAsync(19200, 8, Parity.None, StopBits.One);
             await connect;
 
-            Assert.ThrowsAsync<DeviceConnectionException>(async () => await rb.ConnectAsync());
+            Assert.ThrowsAsync<DeviceConnectionException>(async () => await rb.ConnectAsync(19200, 8, Parity.None, StopBits.One));
 
             Assert.Multiple(() =>
             {
@@ -37,7 +38,7 @@ namespace DS.GroundControl.Lib.Tests
         public async Task Verify_Transitions_To_Connected_After_ConnectAsync()
         {
             using var rb = new RockBlock9603();
-            var connect = rb.ConnectAsync();
+            var connect = rb.ConnectAsync(19200, 8, Parity.None, StopBits.One);
             await connect;
             Assert.Multiple(() =>
             {
@@ -50,7 +51,7 @@ namespace DS.GroundControl.Lib.Tests
         public async Task Verify_Transitions_Between_Connected_And_Disconnected_Without_Faulting()
         {
             var rb = new RockBlock9603();
-            var connect = rb.ConnectAsync();
+            var connect = rb.ConnectAsync(19200, 8, Parity.None, StopBits.One);
             await connect;
             rb.Dispose();
             Assert.Multiple(() =>

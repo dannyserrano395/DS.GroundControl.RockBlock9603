@@ -2,6 +2,7 @@
 using System.Text.Json;
 using System.Text.Encodings.Web;
 using System.CommandLine;
+using System.IO.Ports;
 using DS.GroundControl.Lib.Devices;
 using DS.GroundControl.Lib.Factories;
 
@@ -152,7 +153,7 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
                 if (RockBlock9603 == null)
                 {
                     RockBlock9603 = RockBlock9603Factory.Create();
-                    await RockBlock9603.ConnectAsync();
+                    await RockBlock9603.ConnectAsync(19200, 8, Parity.None, StopBits.One);
                 }
             }
             catch { }
