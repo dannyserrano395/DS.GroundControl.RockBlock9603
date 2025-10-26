@@ -116,10 +116,10 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
                 var status = context.ParseResult.GetValueForOption(statusOption);
 
                 if (start) await Console.Out.WriteLineAsync(await RockBlockStartAsync());
-                else if (stop) await Console.Out.WriteLineAsync(RockBlockStop());
+                else if (stop) await Console.Out.WriteLineAsync(await RockBlockStopAsync());
                 else if (shutdown)
                 {
-                    await Console.Out.WriteLineAsync(RockBlockStop());
+                    await Console.Out.WriteLineAsync(await RockBlockStopAsync());
                     Environment.Exit(0);
                 }
                 else if (time) await Console.Out.WriteLineAsync(await RockBlockTimeAsync());
@@ -158,6 +158,25 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
             }
             catch { }
             return RockBlockStatus();
+        }
+        private async Task<string> RockBlockStopAsync()
+        {
+            var rb = RockBlock9603;
+            if (RockBlock9603 != null)
+            {
+                await RockBlock9603.DisconnectAsync();
+                RockBlock9603.Dispose();
+                RockBlock9603 = null;
+            }
+            return ToJsonString(new
+            {
+                ISU = new
+                {
+                    Connected = rb?.Connected.IsCompletedSuccessfully,
+                    Disconnected = rb?.Disconnected.IsCompletedSuccessfully,
+                    Faulted = rb?.Faulted.IsCompletedSuccessfully
+                }
+            });
         }
         private async Task<string> ExecuteCommandAsync(string command)
         {
@@ -278,24 +297,6 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
                     Connected = RockBlock9603?.Connected.IsCompletedSuccessfully,
                     Disconnected = RockBlock9603?.Disconnected.IsCompletedSuccessfully,
                     Faulted = RockBlock9603?.Faulted.IsCompletedSuccessfully
-                }
-            });
-        }
-        private string RockBlockStop()
-        {
-            var rb = RockBlock9603;
-            if (RockBlock9603 != null)
-            {
-                RockBlock9603.Dispose();
-                RockBlock9603 = null;
-            }
-            return ToJsonString(new
-            {
-                ISU = new
-                {
-                    Connected = rb?.Connected.IsCompletedSuccessfully,
-                    Disconnected = rb?.Disconnected.IsCompletedSuccessfully,
-                    Faulted = rb?.Faulted.IsCompletedSuccessfully
                 }
             });
         }

@@ -17,8 +17,9 @@ namespace DS.GroundControl.Lib.Tests
         }
 
         [OneTimeTearDown]
-        public void Teardown()
+        public async Task Teardown()
         {
+            await RockBlock9603.DisconnectAsync();
             RockBlock9603.Dispose();
         }
 

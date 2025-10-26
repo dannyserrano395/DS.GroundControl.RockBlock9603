@@ -19,27 +19,39 @@ namespace DS.GroundControl.Lib.Tests
             });
         }
         [Test]
+        public void Verify_Transitions_To_Faulted_When_ConnectAsync_Called_With_Bad_PortName()
+        {
+            using var rb = new RockBlock9603();
+
+            Assert.ThrowsAsync<ArgumentException>(async () => await rb.ConnectAsync("BADPORTNAME", 19200, 8, Parity.None, StopBits.One));
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(rb.Connected.IsCompleted, Is.False);
+                Assert.That(rb.Faulted.IsCompletedSuccessfully, Is.True);
+                Assert.That(rb.Disconnected.IsCompleted, Is.False);
+            });
+        }
+        [Test]
         public async Task Verify_Transitions_To_Faulted_When_ConnectAsync_Called_Twice()
         {
             using var rb = new RockBlock9603();
-            var connect = rb.ConnectAsync(19200, 8, Parity.None, StopBits.One);
-            await connect;
+            await rb.ConnectAsync(19200, 8, Parity.None, StopBits.One);
 
             Assert.ThrowsAsync<DeviceConnectionException>(async () => await rb.ConnectAsync(19200, 8, Parity.None, StopBits.One));
 
             Assert.Multiple(() =>
             {
                 Assert.That(rb.Connected.IsCompletedSuccessfully, Is.True);
-                Assert.That(rb.Faulted.IsCompleted, Is.True);
-                Assert.That(rb.Disconnected.IsCompleted, Is.True);
+                Assert.That(rb.Faulted.IsCompletedSuccessfully, Is.True);
+                Assert.That(rb.Disconnected.IsCompletedSuccessfully, Is.True);
             });
         }
         [Test]
         public async Task Verify_Transitions_To_Connected_After_ConnectAsync()
         {
             using var rb = new RockBlock9603();
-            var connect = rb.ConnectAsync(19200, 8, Parity.None, StopBits.One);
-            await connect;
+            await rb.ConnectAsync(19200, 8, Parity.None, StopBits.One);
             Assert.Multiple(() =>
             {
                 Assert.That(rb.Connected.IsCompletedSuccessfully, Is.True);
@@ -50,14 +62,13 @@ namespace DS.GroundControl.Lib.Tests
         [Test]
         public async Task Verify_Transitions_Between_Connected_And_Disconnected_Without_Faulting()
         {
-            var rb = new RockBlock9603();
-            var connect = rb.ConnectAsync(19200, 8, Parity.None, StopBits.One);
-            await connect;
-            rb.Dispose();
+            using var rb = new RockBlock9603();
+            await rb.ConnectAsync(19200, 8, Parity.None, StopBits.One);
+            await rb.DisconnectAsync();
             Assert.Multiple(() =>
             {
                 Assert.That(rb.Connected.IsCompletedSuccessfully, Is.True);
-                Assert.That(rb.Faulted.IsCanceled, Is.True);
+                Assert.That(rb.Faulted.IsCompleted, Is.False);
                 Assert.That(rb.Disconnected.IsCompletedSuccessfully, Is.True);
             });
         }

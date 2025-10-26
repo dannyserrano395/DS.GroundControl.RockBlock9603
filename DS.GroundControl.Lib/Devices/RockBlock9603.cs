@@ -168,6 +168,22 @@ namespace DS.GroundControl.Lib.Devices
                 SemaphoreSlim.Release();
             }
         }
+        public async Task DisconnectAsync()
+        {
+            await SemaphoreSlim.WaitAsync();
+            try
+            {
+                ThrowIfNotConnected();
+                if (TryTransitionToDisconnected())
+                {
+                    SerialPort?.Dispose();
+                }
+            }
+            finally
+            {
+                SemaphoreSlim.Release();
+            }
+        }
         private async Task ValidateConnectionAsync()
         {
             try
@@ -201,15 +217,14 @@ namespace DS.GroundControl.Lib.Devices
         }
         private void CancelIncompleteTransitions()
         {
-            if (!Connected.IsCompleted) { ConnectedSource.TrySetCanceled(); }
+            if (!Connected.IsCompleted)
+                ConnectedSource.TrySetCanceled();
+
             if (!Disconnected.IsCompleted)
-            {
-                if (!TryTransitionToDisconnected())
-                {
-                    DisconnectedSource.TrySetCanceled();
-                }
-            }
-            if (!Faulted.IsCompleted) { FaultedSource.TrySetCanceled(); }
+                DisconnectedSource.TrySetCanceled();
+
+            if (!Faulted.IsCompleted)
+                FaultedSource.TrySetCanceled();
         }
         private void ThrowIfAnyTransitionCompleted()
         {
@@ -800,21 +815,7 @@ namespace DS.GroundControl.Lib.Devices
         {
             if (Interlocked.CompareExchange(ref _isDisposed, 1, 0) == 0)
             {
-                if (SemaphoreSlim.Wait(0))
-                {
-                    try
-                    {
-                        CancelIncompleteTransitions();
-                    }
-                    finally
-                    {
-                        SemaphoreSlim.Release();
-                    }
-                }
-                else
-                {
-                    CancelIncompleteTransitions();
-                }
+                CancelIncompleteTransitions();
                 SerialPort?.Dispose();
                 SemaphoreSlim.Dispose();
             }
