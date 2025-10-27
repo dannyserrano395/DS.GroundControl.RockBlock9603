@@ -72,5 +72,21 @@ namespace DS.GroundControl.Lib.Tests
                 Assert.That(rb.Disconnected.IsCompletedSuccessfully, Is.True);
             });
         }
+        [Test]
+        public void Verify_No_Transition_When_Not_Connected()
+        {
+            using var rb = new RockBlock9603();
+
+            Assert.ThrowsAsync<DeviceConnectionException>(async () => await rb.ExecuteCommandAsync("AT"));
+            Assert.ThrowsAsync<DeviceConnectionException>(async () => await rb.ExecuteReadyStateTextCommandAsync("test"));
+            Assert.ThrowsAsync<DeviceConnectionException>(async () => await rb.ExecuteReadyStateBase64CommandAsync("dGVzdA=="));
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(rb.Connected.IsCompleted, Is.False);
+                Assert.That(rb.Faulted.IsCompleted, Is.False);
+                Assert.That(rb.Disconnected.IsCompleted, Is.False);
+            });
+        }
     }
 }
