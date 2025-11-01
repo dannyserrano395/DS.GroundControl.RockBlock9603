@@ -164,7 +164,11 @@ namespace DS.GroundControl.RockBlock9603.CommandLine
             var rb = RockBlock9603;
             if (RockBlock9603 != null)
             {
-                await RockBlock9603.DisconnectAsync();
+                try
+                {
+                    await RockBlock9603.DisconnectAsync();
+                }
+                catch { }
                 RockBlock9603.Dispose();
                 RockBlock9603 = null;
             }

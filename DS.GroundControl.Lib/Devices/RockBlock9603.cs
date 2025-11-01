@@ -176,17 +176,12 @@ namespace DS.GroundControl.Lib.Devices
             try
             {
                 ThrowIfNotConnected();
-                var (func, timeout) = CommandMap[NormalizeCommand(command)];
-                var output = await func(command).WaitAsync(timeout);
-                return output;
+                return await CommandMapAsync(command);
             }
-            catch
+            catch when (IsConnected())
             {
-                if (IsConnected())
-                {
-                    TryTransitionToFaulted();
-                    SerialPort?.Dispose();
-                }
+                TryTransitionToFaulted();
+                SerialPort?.Dispose();
                 throw;
             }
             finally
@@ -200,16 +195,12 @@ namespace DS.GroundControl.Lib.Devices
             try
             {
                 ThrowIfNotConnected();
-                var output = await ReadyStateTextCommandAsync(command).WaitAsync(TimeSpan.FromSeconds(3));
-                return output;
+                return await ReadyStateTextCommandAsync(command).WaitAsync(TimeSpan.FromSeconds(3));
             }
-            catch
+            catch when (IsConnected())
             {
-                if (IsConnected())
-                {
-                    TryTransitionToFaulted();
-                    SerialPort?.Dispose();
-                }
+                TryTransitionToFaulted();
+                SerialPort?.Dispose();
                 throw;
             }
             finally
@@ -223,16 +214,12 @@ namespace DS.GroundControl.Lib.Devices
             try
             {
                 ThrowIfNotConnected();
-                var output = await ReadyStateBase64CommandAsync(command).WaitAsync(TimeSpan.FromSeconds(3));
-                return output;
+                return await ReadyStateBase64CommandAsync(command).WaitAsync(TimeSpan.FromSeconds(3));
             }
-            catch
+            catch when (IsConnected())
             {
-                if (IsConnected())
-                {
-                    TryTransitionToFaulted();
-                    SerialPort?.Dispose();
-                }
+                TryTransitionToFaulted();
+                SerialPort?.Dispose();
                 throw;
             }
             finally
@@ -245,7 +232,7 @@ namespace DS.GroundControl.Lib.Devices
             await SemaphoreSlim.WaitAsync();
             try
             {
-                ThrowIfNotConnected();
+                ThrowIfNeverConnected();
                 if (TryTransitionToDisconnected())
                 {
                     SerialPort?.Dispose();
@@ -258,17 +245,11 @@ namespace DS.GroundControl.Lib.Devices
         }
         private async Task ValidateConnectionAsync()
         {
-            try
+            var output = await CommandMapAsync("AT");
+            if (output is not { Command: "AT", Response: "", Result: "OK" or "0" })
             {
-                var (func, timeout) = CommandMap[NormalizeCommand("AT")];
-                var output = await func("AT").WaitAsync(timeout);
-                if (output is { Command: "AT", Response: "", Result: "OK" or "0" })
-                {
-                    return;
-                }
+                throw new DeviceException();
             }
-            catch { }
-            throw new DeviceConnectionException();
         }
         private bool TryTransitionToConnected()
         {
@@ -302,14 +283,21 @@ namespace DS.GroundControl.Lib.Devices
         {
             if (Connected.IsCompleted || Faulted.IsCompleted || Disconnected.IsCompleted)
             {
-                throw new DeviceConnectionException();
+                throw new DeviceException();
+            }
+        }
+        private void ThrowIfNeverConnected()
+        {
+            if (!Connected.IsCompletedSuccessfully)
+            {
+                throw new DeviceException();
             }
         }
         private void ThrowIfNotConnected()
         {
             if (!IsConnected())
             {
-                throw new DeviceConnectionException();
+                throw new DeviceException();
             }
         }
         private bool IsConnected()
@@ -318,8 +306,18 @@ namespace DS.GroundControl.Lib.Devices
         }
 
         #region Iridium 9603 Module
-        private IReadOnlyDictionary<string, (Func<string, Task<(string Command, string Response, string Result)>>, TimeSpan)> CommandMap { get; }       
+        private IReadOnlyDictionary<string, (Func<string, Task<(string Command, string Response, string Result)>>, TimeSpan)> CommandMap { get; }
 
+        private async Task<(string Command, string Response, string Result)> CommandMapAsync(string command)
+        {
+            try
+            {
+                var (func, timeout) = CommandMap[NormalizeCommand(command)];
+                return await func(command).WaitAsync(timeout);
+            }
+            catch { }
+            throw new DeviceException();
+        }
         private async Task<(string Command, string Response, string Result)> ReadyStateTextCommandAsync(string command)
         {
             var bytes = Encoding.ASCII.GetBytes(command + '\r');

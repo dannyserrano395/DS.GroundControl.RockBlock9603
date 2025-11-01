@@ -7,7 +7,7 @@ namespace DS.GroundControl.Lib.Tests
     public class RockBlock9603StateTests
     {
         [Test]
-        public void Verify_Transitions_To_Canceled_After_Dispose_Without_Usage()
+        public void Verify_Transitions_To_Canceled_When_Only_Dispose_Called()
         {
             var rb = new RockBlock9603();
             rb.Dispose();
@@ -19,11 +19,11 @@ namespace DS.GroundControl.Lib.Tests
             });
         }
         [Test]
-        public void Verify_Transitions_To_Faulted_When_ConnectAsync_Called_With_Bad_PortName()
+        public void Verify_Transitions_To_Faulted_When_ConnectAsync_Called_With_Invalid_Argument()
         {
             using var rb = new RockBlock9603();
 
-            Assert.ThrowsAsync<ArgumentException>(async () => await rb.ConnectAsync("BADPORTNAME", 19200, 8, Parity.None, StopBits.One));
+            Assert.ThrowsAsync<ArgumentException>(async () => await rb.ConnectAsync("INVALIDPORTNAME", 19200, 8, Parity.None, StopBits.One));
 
             Assert.Multiple(() =>
             {
@@ -38,7 +38,7 @@ namespace DS.GroundControl.Lib.Tests
             using var rb = new RockBlock9603();
             await rb.ConnectAsync(19200, 8, Parity.None, StopBits.One);
 
-            Assert.ThrowsAsync<DeviceConnectionException>(async () => await rb.ConnectAsync(19200, 8, Parity.None, StopBits.One));
+            Assert.ThrowsAsync<DeviceException>(async () => await rb.ConnectAsync(19200, 8, Parity.None, StopBits.One));
 
             Assert.Multiple(() =>
             {
@@ -48,7 +48,52 @@ namespace DS.GroundControl.Lib.Tests
             });
         }
         [Test]
-        public async Task Verify_Transitions_To_Connected_After_ConnectAsync()
+        public async Task Verify_Transitions_To_Faulted_When_ExecuteCommandAsync_Called_With_Invalid_Command()
+        {
+            using var rb = new RockBlock9603();
+            await rb.ConnectAsync(19200, 8, Parity.None, StopBits.One);
+
+            Assert.CatchAsync(async () => await rb.ExecuteCommandAsync("INVALIDCOMMAND"));
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(rb.Connected.IsCompletedSuccessfully, Is.True);
+                Assert.That(rb.Faulted.IsCompletedSuccessfully, Is.True);
+                Assert.That(rb.Disconnected.IsCompletedSuccessfully, Is.True);
+            });
+        }
+        [Test]
+        public async Task Verify_Transitions_To_Faulted_When_ExecuteReadyStateTextCommandAsync_Called_Unexpectedly()
+        {
+            using var rb = new RockBlock9603();
+            await rb.ConnectAsync(19200, 8, Parity.None, StopBits.One);
+
+            Assert.CatchAsync(async () => await rb.ExecuteReadyStateTextCommandAsync("TEST"));
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(rb.Connected.IsCompletedSuccessfully, Is.True);
+                Assert.That(rb.Faulted.IsCompletedSuccessfully, Is.True);
+                Assert.That(rb.Disconnected.IsCompletedSuccessfully, Is.True);
+            });
+        }
+        [Test]
+        public async Task Verify_Transitions_To_Faulted_When_ExecuteReadyStateBase64CommandAsync_Called_Unexpectedly()
+        {
+            using var rb = new RockBlock9603();
+            await rb.ConnectAsync(19200, 8, Parity.None, StopBits.One);
+
+            Assert.CatchAsync(async () => await rb.ExecuteReadyStateBase64CommandAsync("VEVTVA=="));
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(rb.Connected.IsCompletedSuccessfully, Is.True);
+                Assert.That(rb.Faulted.IsCompletedSuccessfully, Is.True);
+                Assert.That(rb.Disconnected.IsCompletedSuccessfully, Is.True);
+            });
+        }
+        [Test]
+        public async Task Verify_Transitions_To_Connected_When_ConnectAsync_Called()
         {
             using var rb = new RockBlock9603();
             await rb.ConnectAsync(19200, 8, Parity.None, StopBits.One);
@@ -60,7 +105,7 @@ namespace DS.GroundControl.Lib.Tests
             });
         }
         [Test]
-        public async Task Verify_Transitions_Between_Connected_And_Disconnected_Without_Faulting()
+        public async Task Verify_Transitions_To_Disconnected_When_DisconnectAsync_Called()
         {
             using var rb = new RockBlock9603();
             await rb.ConnectAsync(19200, 8, Parity.None, StopBits.One);
@@ -73,13 +118,14 @@ namespace DS.GroundControl.Lib.Tests
             });
         }
         [Test]
-        public void Verify_No_Transition_When_Not_Connected()
+        public void Verify_No_Transition_When_ConnectAsync_Never_Called()
         {
             using var rb = new RockBlock9603();
 
-            Assert.ThrowsAsync<DeviceConnectionException>(async () => await rb.ExecuteCommandAsync("AT"));
-            Assert.ThrowsAsync<DeviceConnectionException>(async () => await rb.ExecuteReadyStateTextCommandAsync("test"));
-            Assert.ThrowsAsync<DeviceConnectionException>(async () => await rb.ExecuteReadyStateBase64CommandAsync("dGVzdA=="));
+            Assert.ThrowsAsync<DeviceException>(async () => await rb.ExecuteCommandAsync("AT"));
+            Assert.ThrowsAsync<DeviceException>(async () => await rb.ExecuteReadyStateTextCommandAsync("test"));
+            Assert.ThrowsAsync<DeviceException>(async () => await rb.ExecuteReadyStateBase64CommandAsync("dGVzdA=="));
+            Assert.ThrowsAsync<DeviceException>(async () => await rb.DisconnectAsync());
 
             Assert.Multiple(() =>
             {
