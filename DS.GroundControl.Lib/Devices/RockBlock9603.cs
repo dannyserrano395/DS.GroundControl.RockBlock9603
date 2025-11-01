@@ -105,27 +105,7 @@ namespace DS.GroundControl.Lib.Devices
             try
             {
                 ThrowIfAnyTransitionCompleted();
-                foreach (var name in SerialPort.GetPortNames())
-                {
-                    try
-                    {
-                        SerialPort = new SerialPort()
-                        {
-                            PortName = name,
-                            BaudRate = baudRate,
-                            DataBits = dataBits,
-                            Parity = parity,
-                            StopBits = stopBits
-                        };
-                        SerialPort.Open();
-                        await ValidateConnectionAsync();                       
-                        break;
-                    }
-                    catch 
-                    {
-                        SerialPort?.Dispose();
-                    }
-                }
+                await InitializeSerialPortAsync(baudRate, dataBits, parity, stopBits);
                 TryTransitionToConnected();
                 ThrowIfNotConnected();
             }
@@ -146,16 +126,7 @@ namespace DS.GroundControl.Lib.Devices
             try
             {
                 ThrowIfAnyTransitionCompleted();
-                SerialPort = new SerialPort()
-                {
-                    PortName = portName,
-                    BaudRate = baudRate,
-                    DataBits = dataBits,
-                    Parity = parity,
-                    StopBits = stopBits
-                };
-                SerialPort.Open();
-                await ValidateConnectionAsync();
+                await InitializeSerialPortAsync(portName, baudRate, dataBits, parity, stopBits);
                 TryTransitionToConnected();
                 ThrowIfNotConnected();
             }
@@ -242,6 +213,50 @@ namespace DS.GroundControl.Lib.Devices
             {
                 SemaphoreSlim.Release();
             }
+        }
+        private async Task InitializeSerialPortAsync(int baudRate, int dataBits, Parity parity, StopBits stopBits)
+        {
+            foreach (var name in SerialPort.GetPortNames())
+            {
+                try
+                {
+                    SerialPort = new SerialPort()
+                    {
+                        PortName = name,
+                        BaudRate = baudRate,
+                        DataBits = dataBits,
+                        Parity = parity,
+                        StopBits = stopBits
+                    };
+                    SerialPort.Open();
+                    await ValidateConnectionAsync();
+                    return;
+                }
+                catch
+                {
+                    SerialPort?.Dispose();
+                }
+            }
+            throw new DeviceException();
+        }
+        private async Task InitializeSerialPortAsync(string portName, int baudRate, int dataBits, Parity parity, StopBits stopBits)
+        {
+            try
+            {
+                SerialPort = new SerialPort()
+                {
+                    PortName = portName,
+                    BaudRate = baudRate,
+                    DataBits = dataBits,
+                    Parity = parity,
+                    StopBits = stopBits
+                };
+                SerialPort.Open();
+                await ValidateConnectionAsync();
+                return;
+            }
+            catch { }
+            throw new DeviceException();
         }
         private async Task ValidateConnectionAsync()
         {

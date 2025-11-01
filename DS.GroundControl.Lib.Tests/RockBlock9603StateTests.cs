@@ -23,7 +23,7 @@ namespace DS.GroundControl.Lib.Tests
         {
             using var rb = new RockBlock9603();
 
-            Assert.ThrowsAsync<ArgumentException>(async () => await rb.ConnectAsync("INVALIDPORTNAME", 19200, 8, Parity.None, StopBits.One));
+            Assert.ThrowsAsync<DeviceException>(async () => await rb.ConnectAsync("INVALIDPORTNAME", 19200, 8, Parity.None, StopBits.One));
 
             Assert.Multiple(() =>
             {
