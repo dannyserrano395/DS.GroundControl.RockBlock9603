@@ -255,7 +255,10 @@ namespace DS.GroundControl.Lib.Devices
                 await ValidateConnectionAsync();
                 return;
             }
-            catch { }
+            catch 
+            {
+                SerialPort?.Dispose();
+            }
             throw new DeviceException();
         }
         private async Task ValidateConnectionAsync()
