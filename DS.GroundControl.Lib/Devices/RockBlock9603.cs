@@ -118,15 +118,15 @@ namespace DS.GroundControl.Lib.Devices
                             StopBits = stopBits
                         };
                         SerialPort.Open();
-                        await ValidateConnectionAsync();
-                        TryTransitionToConnected();
+                        await ValidateConnectionAsync();                       
                         break;
                     }
                     catch 
                     {
                         SerialPort?.Dispose();
                     }
-                }              
+                }
+                TryTransitionToConnected();
                 ThrowIfNotConnected();
             }
             catch
