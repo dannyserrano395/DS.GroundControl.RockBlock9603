@@ -38,9 +38,10 @@ namespace DS.GroundControl.Lib.Devices
                 TryTransitionToConnected();
                 ThrowIfNotConnected();
             }
-            catch
+            catch when (!IsFaulted() && !IsDisconnected())
             {
                 TryTransitionToFaulted();
+                TryTransitionToDisconnected();
                 SerialPort?.Dispose();
                 throw;
             }
@@ -59,9 +60,10 @@ namespace DS.GroundControl.Lib.Devices
                 TryTransitionToConnected();
                 ThrowIfNotConnected();
             }
-            catch
+            catch when (!IsFaulted() && !IsDisconnected())
             {
                 TryTransitionToFaulted();
+                TryTransitionToDisconnected();
                 SerialPort?.Dispose();
                 throw;
             }
@@ -81,6 +83,7 @@ namespace DS.GroundControl.Lib.Devices
             catch when (IsConnected())
             {
                 TryTransitionToFaulted();
+                TryTransitionToDisconnected();
                 SerialPort?.Dispose();
                 throw;
             }
@@ -100,6 +103,7 @@ namespace DS.GroundControl.Lib.Devices
             catch when (IsConnected())
             {
                 TryTransitionToFaulted();
+                TryTransitionToDisconnected();
                 SerialPort?.Dispose();
                 throw;
             }
@@ -119,6 +123,7 @@ namespace DS.GroundControl.Lib.Devices
             catch when (IsConnected())
             {
                 TryTransitionToFaulted();
+                TryTransitionToDisconnected();
                 SerialPort?.Dispose();
                 throw;
             }
@@ -204,12 +209,7 @@ namespace DS.GroundControl.Lib.Devices
         }
         private bool TryTransitionToFaulted()
         {
-            if (FaultedSource.TrySetResult())
-            {
-                TryTransitionToDisconnected();
-                return true;
-            }
-            return false;
+            return FaultedSource.TrySetResult();
         }
         private bool TryTransitionToDisconnected()
         {
@@ -250,6 +250,14 @@ namespace DS.GroundControl.Lib.Devices
         private bool IsConnected()
         {
             return Connected.IsCompletedSuccessfully && !Faulted.IsCompleted && !Disconnected.IsCompleted;
+        }
+        private bool IsFaulted()
+        {
+            return Faulted.IsCompletedSuccessfully;
+        }
+        private bool IsDisconnected()
+        {
+            return Disconnected.IsCompletedSuccessfully;
         }
 
         #region Iridium 9603 Module
