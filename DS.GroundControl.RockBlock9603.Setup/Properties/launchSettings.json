@@ -1,8 +1,0 @@
-{
-  "profiles": {
-    "DS.GroundControl.RockBlock9603.Setup": {
-      "commandName": "Project",
-      "commandLineArgs": "--uninstall"
-    }
-  }
-}
